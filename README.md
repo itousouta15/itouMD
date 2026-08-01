@@ -1,7 +1,7 @@
-<img src="LOGO.png" width="90" height="90">
+<img src="LOGO_nbg.png" width="100" height="100">
 <h1>itouMD</h1>
 
-一款用於行動裝置的現代化 Markdown 檢視器，支援本機檔案、貼上內容、遠端 URL 擷取、LaTeX 數學公式與閱讀偏好設定。
+一款用於行動裝置的現代化 Markdown 檢視器
 
 ## 功能亮點
 
