@@ -1,4 +1,4 @@
-<img src="LOGO_nbg.png" width="100" height="100">
+<img src="LOGO_nbg.png" height="100">
 <h1>itouMD</h1>
 
 一款用於行動裝置的現代化 Markdown 檢視器
