@@ -3,10 +3,16 @@ import 'dart:convert';
 import 'package:flutter/foundation.dart' show compute;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_highlight/flutter_highlight.dart';
+import 'package:flutter_highlight/themes/atom-one-dark.dart';
+import 'package:flutter_highlight/themes/atom-one-light.dart';
 import 'package:flutter_math_fork/flutter_math.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:flutter_widget_from_html_core/flutter_widget_from_html_core.dart';
 import 'package:fwfh_svg/fwfh_svg.dart';
+import 'package:highlight/highlight.dart' show highlight;
+import 'package:highlight/languages/all.dart' show allLanguages;
+import 'package:html/dom.dart' as dom;
 import 'package:http/http.dart' as http;
 import 'package:url_launcher/url_launcher.dart';
 
@@ -14,6 +20,17 @@ import '../services/markdown_renderer.dart';
 import '../services/reader_prefs.dart';
 import '../theme.dart';
 import '../widgets/loader_ring.dart';
+
+var _highlightLanguagesRegistered = false;
+
+/// `highlight.parse` falls back to plain text for an unregistered language
+/// rather than throwing, but it only knows about languages we've registered
+/// — do it once, lazily, instead of at every `pre` block render.
+void _ensureHighlightLanguagesRegistered() {
+  if (_highlightLanguagesRegistered) return;
+  highlight.registerLanguages(allLanguages);
+  _highlightLanguagesRegistered = true;
+}
 
 /// Many badge/status-image services (shields.io and friends) serve SVG
 /// without a `.svg` extension in the URL, so [SvgFactory]'s suffix check
@@ -269,6 +286,59 @@ class _ViewerScreenState extends State<ViewerScreen> {
     return null;
   }
 
+  /// Renders a fenced code block (`<pre><code class="language-xxx">`) with
+  /// syntax highlighting when a language was declared on the fence. Falls
+  /// back to `null` (plain `customStylesBuilder`-styled text) for
+  /// language-less blocks — `highlight`'s auto-detect scans every
+  /// registered language synchronously on the UI thread, which is both
+  /// slow for no real benefit and prone to mis-guessing plain output/trees
+  /// as some obscure language.
+  static Widget? _buildHighlightedCode({
+    required dom.Element element,
+    required bool isDark,
+    required TextStyle mono,
+    required double base,
+    required ItouColors c,
+  }) {
+    final codeEl = element.children
+        .where((e) => e.localName == 'code')
+        .firstOrNull;
+    if (codeEl == null) return null;
+
+    final cls = codeEl.attributes['class'] ?? '';
+    final langMatch = RegExp(r'language-(\S+)').firstMatch(cls);
+    final lang = langMatch?.group(1);
+    if (lang == null) return null;
+
+    _ensureHighlightLanguagesRegistered();
+
+    final baseTheme = isDark ? atomOneDarkTheme : atomOneLightTheme;
+    final theme = Map<String, TextStyle>.from(baseTheme)
+      ..['root'] = baseTheme['root']!.copyWith(
+        backgroundColor: Colors.transparent,
+      );
+
+    return Container(
+      width: double.infinity,
+      margin: const EdgeInsets.symmetric(vertical: 8),
+      decoration: BoxDecoration(
+        color: c.inset,
+        border: Border.all(color: c.border),
+      ),
+      child: SingleChildScrollView(
+        scrollDirection: Axis.horizontal,
+        padding: const EdgeInsets.all(12),
+        child: HighlightView(
+          codeEl.text,
+          language: lang,
+          theme: theme,
+          textStyle: mono.copyWith(fontSize: base - 2, height: 1.5),
+          padding: EdgeInsets.zero,
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final html = _html;
@@ -283,6 +353,7 @@ class _ViewerScreenState extends State<ViewerScreen> {
 
     final c = ItouColorsExt.of(context);
     final brightness = Theme.of(context).brightness;
+    final isDark = brightness == Brightness.dark;
     final family = _prefs.fontFamily.textStyle();
     final mono = ReaderFontFamily.mono.textStyle();
     final textColor = _prefs.textColor.resolve(c, brightness);
@@ -336,6 +407,15 @@ class _ViewerScreenState extends State<ViewerScreen> {
                 return true;
               },
               customWidgetBuilder: (element) {
+                if (element.localName == 'pre') {
+                  return _buildHighlightedCode(
+                    element: element,
+                    isDark: isDark,
+                    mono: mono,
+                    base: base,
+                    c: c,
+                  );
+                }
                 if (element.localName != 'x-latex') return null;
                 final encoded = element.attributes['data-tex'] ?? '';
                 final display = element.attributes['data-mode'] == 'display';
