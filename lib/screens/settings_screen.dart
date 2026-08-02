@@ -14,6 +14,7 @@ import '../theme.dart';
 import '../widgets/loader_ring.dart';
 import '../widgets/update_dialog.dart';
 import 'hackmd_account_screen.dart';
+import 'onboarding_screen.dart';
 import 'sync_history_screen.dart';
 
 class SettingsScreen extends StatefulWidget {
@@ -432,6 +433,39 @@ class _SettingsScreenState extends State<SettingsScreen> {
                             const SizedBox(width: 8),
                             Text(
                               '檢查更新',
+                              style: TextStyle(
+                                color: c.text,
+                                fontSize: 13.5,
+                                fontWeight: FontWeight.w500,
+                              ),
+                            ),
+                            const Spacer(),
+                            Icon(Icons.chevron_right, size: 18, color: c.mute),
+                          ],
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 6),
+                    InkWell(
+                      onTap: () => Navigator.of(context).push(
+                        MaterialPageRoute(
+                          builder: (_) => OnboardingScreen(
+                            onDone: () => Navigator.of(context).pop(),
+                          ),
+                        ),
+                      ),
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 2),
+                        child: Row(
+                          children: [
+                            Icon(
+                              Icons.touch_app_outlined,
+                              size: 16,
+                              color: c.blue,
+                            ),
+                            const SizedBox(width: 8),
+                            Text(
+                              '重新查看介紹',
                               style: TextStyle(
                                 color: c.text,
                                 fontSize: 13.5,
