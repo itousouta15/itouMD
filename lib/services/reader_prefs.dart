@@ -39,7 +39,7 @@ extension ReaderFontFamilyX on ReaderFontFamily {
   };
 }
 
-enum ReaderTextColor { theme, sepia, blue, contrast }
+enum ReaderTextColor { theme, sepia, blue, contrast, green, purple, orange, pink, custom }
 
 extension ReaderTextColorX on ReaderTextColor {
   String get label => switch (this) {
@@ -47,21 +47,35 @@ extension ReaderTextColorX on ReaderTextColor {
     ReaderTextColor.sepia => '暖色',
     ReaderTextColor.blue => '藍調',
     ReaderTextColor.contrast => '高對比',
+    ReaderTextColor.green => '綠調',
+    ReaderTextColor.purple => '紫調',
+    ReaderTextColor.orange => '橙調',
+    ReaderTextColor.pink => '粉調',
+    ReaderTextColor.custom => '自訂',
   };
 
-  Color resolve(ItouColors c, Brightness brightness) => switch (this) {
-    ReaderTextColor.theme => c.text,
-    ReaderTextColor.sepia => const Color(0xFFAD8B5C),
-    ReaderTextColor.blue => c.blue,
-    ReaderTextColor.contrast =>
-      brightness == Brightness.dark ? Colors.white : Colors.black,
-  };
+  Color resolve(ItouColors c, Brightness brightness, [Color? customColor]) =>
+      switch (this) {
+        ReaderTextColor.theme => c.text,
+        ReaderTextColor.sepia => const Color(0xFFAD8B5C),
+        ReaderTextColor.blue => c.blue,
+        ReaderTextColor.contrast =>
+          brightness == Brightness.dark ? Colors.white : Colors.black,
+        ReaderTextColor.green => const Color(0xFF7BAE7F),
+        ReaderTextColor.purple => const Color(0xFFB39DDB),
+        ReaderTextColor.orange => const Color(0xFFFFB74D),
+        ReaderTextColor.pink => const Color(0xFFF48FB1),
+        ReaderTextColor.custom =>
+          customColor ??
+          (brightness == Brightness.dark ? Colors.white : Colors.black),
+      };
 }
 
 class ReaderPrefs {
   static const _fontKey = 'reader_font_family';
   static const _sizeKey = 'reader_font_size';
   static const _colorKey = 'reader_text_color';
+  static const _customColorKey = 'reader_custom_color';
 
   static const double defaultFontSize = 15.5;
   static const double minFontSize = 13;
@@ -70,22 +84,26 @@ class ReaderPrefs {
   final ReaderFontFamily fontFamily;
   final double fontSize;
   final ReaderTextColor textColor;
+  final Color customColor;
 
   const ReaderPrefs({
     this.fontFamily = ReaderFontFamily.sans,
     this.fontSize = defaultFontSize,
     this.textColor = ReaderTextColor.theme,
+    this.customColor = Colors.white,
   });
 
   ReaderPrefs copyWith({
     ReaderFontFamily? fontFamily,
     double? fontSize,
     ReaderTextColor? textColor,
+    Color? customColor,
   }) {
     return ReaderPrefs(
       fontFamily: fontFamily ?? this.fontFamily,
       fontSize: fontSize ?? this.fontSize,
       textColor: textColor ?? this.textColor,
+      customColor: customColor ?? this.customColor,
     );
   }
 
@@ -93,6 +111,7 @@ class ReaderPrefs {
     final prefs = await SharedPreferences.getInstance();
     final fontIndex = prefs.getInt(_fontKey);
     final colorIndex = prefs.getInt(_colorKey);
+    final customColorValue = prefs.getInt(_customColorKey);
     return ReaderPrefs(
       fontFamily:
           (fontIndex != null && fontIndex < ReaderFontFamily.values.length)
@@ -103,6 +122,9 @@ class ReaderPrefs {
           (colorIndex != null && colorIndex < ReaderTextColor.values.length)
           ? ReaderTextColor.values[colorIndex]
           : ReaderTextColor.theme,
+      customColor: customColorValue != null
+          ? Color(customColorValue)
+          : Colors.white,
     );
   }
 
@@ -111,5 +133,6 @@ class ReaderPrefs {
     await prefs.setInt(_fontKey, fontFamily.index);
     await prefs.setDouble(_sizeKey, fontSize);
     await prefs.setInt(_colorKey, textColor.index);
+    await prefs.setInt(_customColorKey, customColor.toARGB32());
   }
 }
