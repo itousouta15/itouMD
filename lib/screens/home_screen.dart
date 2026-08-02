@@ -126,7 +126,8 @@ class _HomeScreenState extends State<HomeScreen> {
       final text = await fetchMarkdownFromUrl(input);
       if (!mounted) return;
       final segments = Uri.tryParse(input)?.pathSegments ?? const <String>[];
-      final niceTitle = segments.isNotEmpty ? segments.last : input;
+      final niceTitle =
+          extractDocTitle(text) ?? (segments.isNotEmpty ? segments.last : input);
       _openViewer(
         niceTitle,
         text,
@@ -266,7 +267,7 @@ class _HomeScreenState extends State<HomeScreen> {
                     _StepCard(
                       step: '02',
                       title: '選擇本機檔案',
-                      accent: c.purple,
+                      accent: c.blue,
                       child: ElevatedButton.icon(
                         onPressed: _busy ? null : _pickFile,
                         icon: const Icon(Icons.folder_open_outlined, size: 18),
@@ -322,7 +323,7 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 }
 
-class _Header extends StatelessWidget {
+class _Header extends StatefulWidget {
   final ItouColors c;
   final bool isDark;
   final VoidCallback onToggleTheme;
@@ -334,7 +335,29 @@ class _Header extends StatelessWidget {
   });
 
   @override
+  State<_Header> createState() => _HeaderState();
+}
+
+class _HeaderState extends State<_Header> {
+  // The theme's own colours crossfade instantly via AnimatedTheme; the logo
+  // swap is held back a beat so it reads as following that transition
+  // rather than leading it, then fades between the two artworks itself.
+  late bool _logoIsDark = widget.isDark;
+
+  @override
+  void didUpdateWidget(covariant _Header oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.isDark != widget.isDark) {
+      Future.delayed(const Duration(milliseconds: 150), () {
+        if (mounted) setState(() => _logoIsDark = widget.isDark);
+      });
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
+    final c = widget.c;
+    final isDark = widget.isDark;
     final mono = Theme.of(context).textTheme.labelSmall!;
     return Padding(
       padding: const EdgeInsets.fromLTRB(20, 20, 20, 28),
@@ -342,10 +365,20 @@ class _Header extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Padding(
-            padding: const EdgeInsets.only(top: 4),
-            child: Image.asset(
-              isDark ? 'assets/logo/logo_nbg.webp' : 'assets/logo/logo_wtnbg.webp',
-              height: 50,
+            padding: const EdgeInsets.only(top: 3),
+            child: AnimatedSwitcher(
+              duration: const Duration(milliseconds: 280),
+              switchInCurve: Curves.easeOut,
+              switchOutCurve: Curves.easeIn,
+              transitionBuilder: (child, animation) =>
+                  FadeTransition(opacity: animation, child: child),
+              child: Image.asset(
+                _logoIsDark
+                    ? 'assets/logo/logo_nbg.webp'
+                    : 'assets/logo/logo_wtnbg.webp',
+                key: ValueKey(_logoIsDark),
+                height: 50,
+              ),
             ),
           ),
           const SizedBox(width: 14),
@@ -380,7 +413,7 @@ class _Header extends StatelessWidget {
               isDark ? Icons.dark_mode_outlined : Icons.light_mode_outlined,
               color: c.dim,
             ),
-            onPressed: onToggleTheme,
+            onPressed: widget.onToggleTheme,
           ),
         ],
       ),

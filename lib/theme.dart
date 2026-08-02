@@ -34,7 +34,23 @@ class ItouColors extends ThemeExtension<ItouColors> {
   ItouColors copyWith() => this;
 
   @override
-  ItouColors lerp(ThemeExtension<ItouColors>? other, double t) => this;
+  ItouColors lerp(ThemeExtension<ItouColors>? other, double t) {
+    if (other is! ItouColors) return this;
+    return ItouColors(
+      bg: Color.lerp(bg, other.bg, t)!,
+      panel: Color.lerp(panel, other.panel, t)!,
+      panelHover: Color.lerp(panelHover, other.panelHover, t)!,
+      inset: Color.lerp(inset, other.inset, t)!,
+      border: Color.lerp(border, other.border, t)!,
+      border2: Color.lerp(border2, other.border2, t)!,
+      text: Color.lerp(text, other.text, t)!,
+      dim: Color.lerp(dim, other.dim, t)!,
+      mute: Color.lerp(mute, other.mute, t)!,
+      blue: Color.lerp(blue, other.blue, t)!,
+      purple: Color.lerp(purple, other.purple, t)!,
+      shadow: Color.lerp(shadow, other.shadow, t)!,
+    );
+  }
 
   static const dark = ItouColors(
     bg: Color(0xFF1B1E23),
