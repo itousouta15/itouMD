@@ -407,6 +407,32 @@ class _SettingsScreenState extends State<SettingsScreen> {
             ],
           ),
           const SizedBox(height: 24),
+          const SectionLabel('更多'),
+          const SizedBox(height: 8),
+          _Panel(
+            children: [
+              _SettingRow(
+                icon: Icons.system_update_outlined,
+                label: '檢查更新',
+                trailing: Icon(Icons.chevron_right, size: 18, color: c.mute),
+                onTap: () => _checkForUpdate(context),
+              ),
+              Divider(height: 1, thickness: 1, color: c.border),
+              _SettingRow(
+                icon: Icons.touch_app_outlined,
+                label: '重新查看介紹',
+                trailing: Icon(Icons.chevron_right, size: 18, color: c.mute),
+                onTap: () => Navigator.of(context).push(
+                  MaterialPageRoute(
+                    builder: (_) => OnboardingScreen(
+                      onDone: () => Navigator.of(context).pop(),
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 24),
           const SectionLabel('關於'),
           const SizedBox(height: 8),
           _Panel(
@@ -419,66 +445,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    InkWell(
-                      onTap: () => _checkForUpdate(context),
-                      child: Padding(
-                        padding: const EdgeInsets.symmetric(vertical: 2),
-                        child: Row(
-                          children: [
-                            Icon(
-                              Icons.system_update_outlined,
-                              size: 16,
-                              color: c.blue,
-                            ),
-                            const SizedBox(width: 8),
-                            Text(
-                              '檢查更新',
-                              style: TextStyle(
-                                color: c.text,
-                                fontSize: 13.5,
-                                fontWeight: FontWeight.w500,
-                              ),
-                            ),
-                            const Spacer(),
-                            Icon(Icons.chevron_right, size: 18, color: c.mute),
-                          ],
-                        ),
-                      ),
-                    ),
-                    const SizedBox(height: 6),
-                    InkWell(
-                      onTap: () => Navigator.of(context).push(
-                        MaterialPageRoute(
-                          builder: (_) => OnboardingScreen(
-                            onDone: () => Navigator.of(context).pop(),
-                          ),
-                        ),
-                      ),
-                      child: Padding(
-                        padding: const EdgeInsets.symmetric(vertical: 2),
-                        child: Row(
-                          children: [
-                            Icon(
-                              Icons.touch_app_outlined,
-                              size: 16,
-                              color: c.blue,
-                            ),
-                            const SizedBox(width: 8),
-                            Text(
-                              '重新查看介紹',
-                              style: TextStyle(
-                                color: c.text,
-                                fontSize: 13.5,
-                                fontWeight: FontWeight.w500,
-                              ),
-                            ),
-                            const Spacer(),
-                            Icon(Icons.chevron_right, size: 18, color: c.mute),
-                          ],
-                        ),
-                      ),
-                    ),
-                    const SizedBox(height: 10),
                     Text(
                       'itouMD $_appVersion',
                       style: TextStyle(
