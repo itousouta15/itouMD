@@ -64,9 +64,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 
   Future<void> _openAccount() async {
-    await Navigator.of(context).push(
-      MaterialPageRoute(builder: (_) => const HackmdAccountScreen()),
-    );
+    await Navigator.of(
+      context,
+    ).push(MaterialPageRoute(builder: (_) => const HackmdAccountScreen()));
     _loadAccount();
   }
 
@@ -86,7 +86,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
         return StatefulBuilder(
           builder: (ctx, setDialogState) {
             final c = ItouColorsExt.of(ctx);
-            final current = HSVColor.fromAHSV(1, hue, saturation, brightness).toColor();
+            final current = HSVColor.fromAHSV(
+              1,
+              hue,
+              saturation,
+              brightness,
+            ).toColor();
             return AlertDialog(
               title: const Text('自訂顏色'),
               content: SizedBox(
@@ -107,14 +112,18 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     _HsvSlider(
                       label: '色相',
                       gradientColors: const [
-                        Colors.red, Colors.yellow, Colors.green,
-                        Colors.cyan, Colors.blue, Color(0xFFFF00FF), Colors.red,
+                        Colors.red,
+                        Colors.yellow,
+                        Colors.green,
+                        Colors.cyan,
+                        Colors.blue,
+                        Color(0xFFFF00FF),
+                        Colors.red,
                       ],
                       value: hue,
                       max: 360,
                       thumbColor: HSVColor.fromAHSV(1, hue, 1, 1).toColor(),
-                      onChanged: (v) =>
-                          setDialogState(() => hue = v),
+                      onChanged: (v) => setDialogState(() => hue = v),
                     ),
                     _HsvSlider(
                       label: '飽和度',
@@ -125,8 +134,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       value: saturation,
                       max: 1,
                       thumbColor: current,
-                      onChanged: (v) =>
-                          setDialogState(() => saturation = v),
+                      onChanged: (v) => setDialogState(() => saturation = v),
                     ),
                     _HsvSlider(
                       label: '亮度',
@@ -137,8 +145,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       value: brightness,
                       max: 1,
                       thumbColor: current,
-                      onChanged: (v) =>
-                          setDialogState(() => brightness = v),
+                      onChanged: (v) => setDialogState(() => brightness = v),
                     ),
                     const SizedBox(height: 8),
                     Text(
@@ -158,8 +165,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   child: const Text('取消'),
                 ),
                 TextButton(
-                  onPressed: () =>
-                      Navigator.of(ctx).pop(current),
+                  onPressed: () => Navigator.of(ctx).pop(current),
                   child: const Text('確定'),
                 ),
               ],
@@ -176,9 +182,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
   Future<void> _clearRecents() async {
     await RecentDocs.clear();
     if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('已清除最近開啟紀錄 (｡•ᴗ•｡)')),
-    );
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(const SnackBar(content: Text('已清除最近開啟紀錄 (｡•ᴗ•｡)')));
   }
 
   @override
@@ -196,7 +202,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
           _Panel(
             children: [
               _SettingRow(
-                icon: isDark ? Icons.dark_mode_outlined : Icons.light_mode_outlined,
+                icon: isDark
+                    ? Icons.dark_mode_outlined
+                    : Icons.light_mode_outlined,
                 label: '深色模式',
                 trailing: Switch(
                   value: isDark,
@@ -247,10 +255,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(
-                      '衝突處理',
-                      style: TextStyle(color: c.text, fontSize: 14),
-                    ),
+                    Text('衝突處理', style: TextStyle(color: c.text, fontSize: 14)),
                     const SizedBox(height: 8),
                     Text(
                       '同步時偵測到雲端版本被改過，要怎麼處理？',
@@ -292,7 +297,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
           _Panel(
             children: [
               _SettingRow(
-                icon: _user != null ? Icons.cloud_done_outlined : Icons.cloud_off_outlined,
+                icon: _user != null
+                    ? Icons.cloud_done_outlined
+                    : Icons.cloud_off_outlined,
                 label: _user != null
                     ? _user!.name ?? _user!.email ?? '已連結'
                     : '尚未連結',
@@ -322,17 +329,26 @@ class _SettingsScreenState extends State<SettingsScreen> {
           _Panel(
             children: [
               Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 14,
+                  vertical: 14,
+                ),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
                       'itouMD 1.0.1',
-                      style: TextStyle(color: c.text, fontSize: 14, fontWeight: FontWeight.w600),
+                      style: TextStyle(
+                        color: c.text,
+                        fontSize: 14,
+                        fontWeight: FontWeight.w600,
+                      ),
                     ),
                     const SizedBox(height: 10),
                     GestureDetector(
-                      onTap: () => launchUrl(Uri.parse('https://github.com/itousouta15/itouMD')),
+                      onTap: () => launchUrl(
+                        Uri.parse('https://github.com/itousouta15/itouMD'),
+                      ),
                       child: Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
@@ -456,7 +472,11 @@ class _ReaderPrefsSection extends StatelessWidget {
         children: [
           Text(
             '字體',
-            style: TextStyle(color: c.text, fontSize: 13, fontWeight: FontWeight.w600),
+            style: TextStyle(
+              color: c.text,
+              fontSize: 13,
+              fontWeight: FontWeight.w600,
+            ),
           ),
           const SizedBox(height: 10),
           Wrap(
@@ -473,7 +493,7 @@ class _ReaderPrefsSection extends StatelessWidget {
                   onTap: () => onChanged(prefs.copyWith(fontFamily: f)),
                 ),
               );
-            })            .toList(),
+            }).toList(),
           ),
           const SizedBox(height: 10),
           Container(
@@ -490,25 +510,26 @@ class _ReaderPrefsSection extends StatelessWidget {
                 const SizedBox(height: 8),
                 Text(
                   '中文閱讀體驗、The quick brown fox と日本語。',
-                  style: prefs.fontFamily
-                      .textStyle()
-                      .copyWith(
-                        fontSize: prefs.fontSize,
-                        color: prefs.textColor.resolve(c, brightness, prefs.customColor),
-                        height: 1.6,
-                      ),
+                  style: prefs.fontFamily.textStyle().copyWith(
+                    fontSize: prefs.fontSize,
+                    color: prefs.textColor.resolve(
+                      c,
+                      brightness,
+                      prefs.customColor,
+                    ),
+                    height: 1.6,
+                  ),
                 ),
                 const SizedBox(height: 6),
                 Text(
                   '## Heading  *italic*  **bold**  `code`',
-                  style: prefs.fontFamily
-                      .textStyle()
-                      .copyWith(
-                        fontSize: prefs.fontSize - 2,
-                        color: prefs.textColor.resolve(c, brightness, prefs.customColor)
-                            .withValues(alpha: 0.7),
-                        height: 1.6,
-                      ),
+                  style: prefs.fontFamily.textStyle().copyWith(
+                    fontSize: prefs.fontSize - 2,
+                    color: prefs.textColor
+                        .resolve(c, brightness, prefs.customColor)
+                        .withValues(alpha: 0.7),
+                    height: 1.6,
+                  ),
                 ),
               ],
             ),
@@ -518,7 +539,11 @@ class _ReaderPrefsSection extends StatelessWidget {
             children: [
               Text(
                 '字級',
-                style: TextStyle(color: c.text, fontSize: 13, fontWeight: FontWeight.w600),
+                style: TextStyle(
+                  color: c.text,
+                  fontSize: 13,
+                  fontWeight: FontWeight.w600,
+                ),
               ),
               const Spacer(),
               Text(
@@ -548,7 +573,11 @@ class _ReaderPrefsSection extends StatelessWidget {
           const SizedBox(height: 10),
           Text(
             '文字顏色',
-            style: TextStyle(color: c.text, fontSize: 13, fontWeight: FontWeight.w600),
+            style: TextStyle(
+              color: c.text,
+              fontSize: 13,
+              fontWeight: FontWeight.w600,
+            ),
           ),
           const SizedBox(height: 12),
           Wrap(
@@ -591,7 +620,9 @@ class _ReaderPrefsSection extends StatelessWidget {
                       style: TextStyle(
                         color: selected ? c.text : c.dim,
                         fontSize: 12,
-                        fontWeight: selected ? FontWeight.w600 : FontWeight.w400,
+                        fontWeight: selected
+                            ? FontWeight.w600
+                            : FontWeight.w400,
                       ),
                     ),
                   ],
@@ -673,8 +704,10 @@ class _HsvSlider extends StatelessWidget {
           children: [
             Text(label, style: TextStyle(color: c.text, fontSize: 13)),
             const Spacer(),
-            Text('$display$suffix',
-                style: TextStyle(color: c.mute, fontSize: 12)),
+            Text(
+              '$display$suffix',
+              style: TextStyle(color: c.mute, fontSize: 12),
+            ),
           ],
         ),
         Stack(
@@ -691,10 +724,8 @@ class _HsvSlider extends StatelessWidget {
             SliderTheme(
               data: SliderThemeData(
                 trackHeight: 8,
-                thumbShape:
-                    const RoundSliderThumbShape(enabledThumbRadius: 10),
-                overlayShape:
-                    const RoundSliderOverlayShape(overlayRadius: 18),
+                thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 10),
+                overlayShape: const RoundSliderOverlayShape(overlayRadius: 18),
                 activeTrackColor: Colors.transparent,
                 inactiveTrackColor: Colors.transparent,
                 thumbColor: thumbColor,

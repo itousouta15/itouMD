@@ -142,9 +142,9 @@ class _HomeScreenState extends State<HomeScreen> {
       );
       return;
     }
-    await Navigator.of(context).push(
-      MaterialPageRoute(builder: (_) => const HackmdNotesScreen()),
-    );
+    await Navigator.of(
+      context,
+    ).push(MaterialPageRoute(builder: (_) => const HackmdNotesScreen()));
   }
 
   Future<void> _fetchUrl() async {
@@ -363,17 +363,24 @@ class _HomeScreenState extends State<HomeScreen> {
                         mainAxisSize: MainAxisSize.min,
                         children: [
                           GestureDetector(
-                            onTap: () => launchUrl(Uri.parse('https://itousouta.me')),
+                            onTap: () =>
+                                launchUrl(Uri.parse('https://itousouta.me')),
                             child: Text.rich(
                               TextSpan(
                                 children: [
                                   TextSpan(
                                     text: 'Made with ♥ by ',
-                                    style: TextStyle(color: c.mute, fontSize: 11),
+                                    style: TextStyle(
+                                      color: c.mute,
+                                      fontSize: 11,
+                                    ),
                                   ),
                                   TextSpan(
                                     text: 'itouSouta',
-                                    style: TextStyle(color: c.blue, fontSize: 11),
+                                    style: TextStyle(
+                                      color: c.blue,
+                                      fontSize: 11,
+                                    ),
                                   ),
                                 ],
                               ),
@@ -381,7 +388,9 @@ class _HomeScreenState extends State<HomeScreen> {
                           ),
                           const SizedBox(height: 6),
                           GestureDetector(
-                            onTap: () => launchUrl(Uri.parse('https://github.com/itouSouta/itouMD')),
+                            onTap: () => launchUrl(
+                              Uri.parse('https://github.com/itouSouta/itouMD'),
+                            ),
                             child: Text(
                               '如果喜歡的話歡迎到 GitHub 給個 star ♡',
                               style: TextStyle(color: c.mute, fontSize: 11),
