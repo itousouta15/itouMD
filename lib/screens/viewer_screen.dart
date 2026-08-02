@@ -1,5 +1,6 @@
 import 'dart:convert';
 
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/foundation.dart' show compute;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -16,10 +17,42 @@ import 'package:html/dom.dart' as dom;
 import 'package:http/http.dart' as http;
 import 'package:url_launcher/url_launcher.dart';
 
+import '../services/markdown_editor_actions.dart';
 import '../services/markdown_renderer.dart';
 import '../services/reader_prefs.dart';
+import '../services/recent_docs.dart';
 import '../theme.dart';
 import '../widgets/loader_ring.dart';
+
+/// Turns "press Enter on a list item" into "continue the list" instead of a
+/// bare newline — the single biggest bit of editor friction on mobile,
+/// where retyping `- ` for every line is tedious with no physical keyboard.
+class _MarkdownListContinuationFormatter extends TextInputFormatter {
+  @override
+  TextEditingValue formatEditUpdate(
+    TextEditingValue oldValue,
+    TextEditingValue newValue,
+  ) {
+    // Don't interfere mid-IME-composition (CJK input etc.).
+    if (newValue.composing != TextRange.empty) return newValue;
+    if (newValue.text.length != oldValue.text.length + 1) return newValue;
+    if (!newValue.selection.isCollapsed) return newValue;
+
+    final insertionIndex = newValue.selection.baseOffset - 1;
+    if (insertionIndex < 0 || insertionIndex >= newValue.text.length) {
+      return newValue;
+    }
+    if (newValue.text[insertionIndex] != '\n') return newValue;
+
+    final result = computeEnterListContinuation(newValue.text, insertionIndex);
+    if (result == null) return newValue;
+
+    return TextEditingValue(
+      text: result.text,
+      selection: TextSelection.collapsed(offset: result.cursor),
+    );
+  }
+}
 
 var _highlightLanguagesRegistered = false;
 
@@ -229,8 +262,16 @@ class _SniffedNetworkImageState extends State<_SniffedNetworkImage> {
 class ViewerScreen extends StatefulWidget {
   final String title;
   final String content;
+  final RecentDocSource source;
+  final String? sourceRef;
 
-  const ViewerScreen({super.key, required this.title, required this.content});
+  const ViewerScreen({
+    super.key,
+    required this.title,
+    required this.content,
+    this.source = RecentDocSource.paste,
+    this.sourceRef,
+  });
 
   @override
   State<ViewerScreen> createState() => _ViewerScreenState();
@@ -242,6 +283,10 @@ class _ViewerScreenState extends State<ViewerScreen> {
   // opening a large document doesn't freeze the navigation transition; null
   // just means "still converting", shown as a loading state below.
   String? _html;
+  late String _content = widget.content;
+  late final _editController = TextEditingController(text: widget.content);
+  final _editFocusNode = FocusNode();
+  bool _editing = false;
 
   @override
   void initState() {
@@ -249,9 +294,131 @@ class _ViewerScreenState extends State<ViewerScreen> {
     ReaderPrefs.load().then((loaded) {
       if (mounted) setState(() => _prefs = loaded);
     });
-    compute(convertMarkdownToHtml, widget.content).then((html) {
+    _render(_content);
+  }
+
+  @override
+  void dispose() {
+    _editController.dispose();
+    _editFocusNode.dispose();
+    super.dispose();
+  }
+
+  /// Applies a pure [EditResult] to the controller and hands focus straight
+  /// back to the field, since tapping a toolbar button would otherwise steal
+  /// focus from the [TextField] and dismiss the keyboard.
+  void _applyEditResult(EditResult result) {
+    _editController.value = TextEditingValue(
+      text: result.text,
+      selection: TextSelection(
+        baseOffset: result.selectionStart,
+        extentOffset: result.selectionEnd,
+      ),
+    );
+    _editFocusNode.requestFocus();
+  }
+
+  int get _safeCursor {
+    final offset = _editController.selection.baseOffset;
+    return offset < 0 ? _editController.text.length : offset;
+  }
+
+  (int, int) get _safeSelection {
+    final sel = _editController.selection;
+    if (!sel.isValid) {
+      final end = _editController.text.length;
+      return (end, end);
+    }
+    return (sel.start, sel.end);
+  }
+
+  void _toolbarWrap(String prefix, [String? suffix]) {
+    final (start, end) = _safeSelection;
+    _applyEditResult(
+      wrapSelection(_editController.text, start, end, prefix, suffix),
+    );
+  }
+
+  void _toolbarLinePrefix(String prefix) {
+    _applyEditResult(
+      toggleLinePrefix(_editController.text, _safeCursor, prefix),
+    );
+  }
+
+  void _toolbarHeading() {
+    _applyEditResult(cycleHeading(_editController.text, _safeCursor));
+  }
+
+  void _toolbarLink() {
+    final (start, end) = _safeSelection;
+    _applyEditResult(insertLink(_editController.text, start, end));
+  }
+
+  void _toolbarCodeBlock() {
+    final (start, end) = _safeSelection;
+    _applyEditResult(insertCodeBlock(_editController.text, start, end));
+  }
+
+  void _render(String markdown) {
+    _html = null;
+    compute(convertMarkdownToHtml, markdown).then((html) {
       if (mounted) setState(() => _html = html);
     });
+  }
+
+  /// Leaves edit mode, re-renders the preview from the edited text, and
+  /// persists the change to the recent-docs entry (matched by title+source)
+  /// so reopening the doc later — from "最近開啟" — shows the edit. Writing
+  /// the edit back to an actual file on disk is a separate, explicit
+  /// "另存新檔" action, since silently overwriting the original is riskier
+  /// and Android's scoped storage often can't do it reliably anyway.
+  Future<void> _applyEdit() async {
+    final edited = _editController.text;
+    setState(() {
+      _editing = false;
+      _content = edited;
+    });
+    _render(edited);
+    await RecentDocs.add(
+      RecentDoc(
+        title: widget.title,
+        content: edited,
+        source: widget.source,
+        sourceRef: widget.sourceRef,
+        openedAt: DateTime.now(),
+      ),
+    );
+  }
+
+  void _enterEdit() {
+    _editController.text = _content;
+    setState(() => _editing = true);
+  }
+
+  Future<void> _saveAs(BuildContext context) async {
+    final text = _editing ? _editController.text : _content;
+    final safeTitle = widget.title.replaceAll(RegExp(r'[\\/:*?"<>|]'), '_');
+    try {
+      final path = await FilePicker.saveFile(
+        dialogTitle: '另存新檔',
+        fileName: safeTitle.toLowerCase().endsWith('.md')
+            ? safeTitle
+            : '$safeTitle.md',
+        type: FileType.custom,
+        allowedExtensions: ['md'],
+        bytes: Uint8List.fromList(utf8.encode(text)),
+      );
+      if (!context.mounted) return;
+      if (path == null) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('已另存新檔 (｡•ᴗ•｡)')));
+    } catch (_) {
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('儲存失敗，再試一次看看 (´;ω;`)')));
+    }
   }
 
   void _updatePrefs(ReaderPrefs next) {
@@ -377,242 +544,303 @@ class _ViewerScreenState extends State<ViewerScreen> {
         title: Text(widget.title, overflow: TextOverflow.ellipsis),
         actions: [
           IconButton(
-            tooltip: '顯示設定',
-            icon: const Icon(Icons.text_fields_outlined),
-            onPressed: () => _openReaderSettings(context),
+            tooltip: _editing ? '完成編輯' : '編輯',
+            icon: Icon(_editing ? Icons.done_outlined : Icons.edit_outlined),
+            onPressed: _editing ? _applyEdit : _enterEdit,
           ),
           IconButton(
-            tooltip: '複製原始碼',
-            icon: const Icon(Icons.copy_all_outlined),
-            onPressed: () => _copyRaw(context),
+            tooltip: '另存新檔',
+            icon: const Icon(Icons.save_alt_outlined),
+            onPressed: () => _saveAs(context),
           ),
+          if (!_editing) ...[
+            IconButton(
+              tooltip: '顯示設定',
+              icon: const Icon(Icons.text_fields_outlined),
+              onPressed: () => _openReaderSettings(context),
+            ),
+            IconButton(
+              tooltip: '複製原始碼',
+              icon: const Icon(Icons.copy_all_outlined),
+              onPressed: () => _copyRaw(context),
+            ),
+          ],
         ],
       ),
-      body: Container(
-        color: c.bg,
-        child: SelectionArea(
-          child: SingleChildScrollView(
-            padding: const EdgeInsets.fromLTRB(20, 12, 20, 40),
-            child: HtmlWidget(
-              html,
-              factoryBuilder: () => _SvgAwareWidgetFactory(),
-              textStyle: family.copyWith(
-                color: textColor,
-                fontSize: base,
-                height: 1.65,
-              ),
-              onTapUrl: (url) async {
-                final uri = Uri.tryParse(url);
-                if (uri != null) await launchUrl(uri);
-                return true;
-              },
-              customWidgetBuilder: (element) {
-                if (element.localName == 'pre') {
-                  return _buildHighlightedCode(
-                    element: element,
-                    isDark: isDark,
-                    mono: mono,
-                    base: base,
-                    c: c,
-                  );
-                }
-                if (element.localName != 'x-latex') return null;
-                final encoded = element.attributes['data-tex'] ?? '';
-                final display = element.attributes['data-mode'] == 'display';
-                String tex;
-                try {
-                  tex = utf8.decode(base64Decode(encoded));
-                } catch (_) {
-                  tex = '';
-                }
-                final mathWidget = Math.tex(
-                  tex,
-                  mathStyle: display ? MathStyle.display : MathStyle.text,
-                  textStyle: family.copyWith(color: textColor, fontSize: base),
-                  onErrorFallback: (err) => Text(
-                    '⚠ LaTeX 語法錯誤',
-                    style: TextStyle(color: c.mute, fontSize: base - 2),
+      body: _editing
+          ? Column(
+              children: [
+                Expanded(
+                  child: Container(
+                    color: c.bg,
+                    padding: const EdgeInsets.all(16),
+                    child: TextField(
+                      controller: _editController,
+                      focusNode: _editFocusNode,
+                      autofocus: true,
+                      maxLines: null,
+                      expands: true,
+                      textAlignVertical: TextAlignVertical.top,
+                      keyboardType: TextInputType.multiline,
+                      inputFormatters: [_MarkdownListContinuationFormatter()],
+                      style: mono.copyWith(
+                        color: c.text,
+                        fontSize: base - 1,
+                        height: 1.5,
+                      ),
+                      decoration: const InputDecoration(
+                        border: InputBorder.none,
+                      ),
+                    ),
                   ),
-                );
-                if (!display) return mathWidget;
-                return Padding(
-                  padding: const EdgeInsets.symmetric(vertical: 8),
-                  child: Center(child: mathWidget),
-                );
-              },
-              customStylesBuilder: (element) {
-                switch (element.localName) {
-                  case 'x-latex':
-                    return element.attributes['data-mode'] == 'display'
-                        ? {'display': 'block'}
-                        : null;
-                  case 'h1':
-                    return {
-                      'color': textHex,
-                      'font-family': family.fontFamily ?? '',
-                      'font-size': '${base + 10.5}px',
-                      'font-weight': '700',
-                      'border-bottom': '1px solid $border2Hex',
-                      'padding': '0 0 8px 0',
-                      'margin': '4px 0 14px 0',
-                    };
-                  case 'h2':
-                    return {
-                      'color': textHex,
-                      'font-family': family.fontFamily ?? '',
-                      'font-size': '${base + 5.5}px',
-                      'font-weight': '700',
-                      'border-bottom': '1px solid $border2Hex',
-                      'padding': '0 0 6px 0',
-                      'margin': '4px 0 12px 0',
-                    };
-                  case 'h3':
-                    return {
-                      'color': textHex,
-                      'font-family': family.fontFamily ?? '',
-                      'font-size': '${base + 2.5}px',
-                      'font-weight': '600',
-                    };
-                  case 'h4':
-                    return {'color': textHex, 'font-weight': '600'};
-                  case 'h5':
-                    return {
-                      'color': dimHex,
-                      'font-size': '${base - 1.5}px',
-                      'font-weight': '600',
-                    };
-                  case 'h6':
-                    return {
-                      'color': muteHex,
-                      'font-size': '${base - 2.5}px',
-                      'font-weight': '600',
-                    };
-                  case 'p':
-                    final cls = element.attributes['class'] ?? '';
-                    if (cls.contains('-title')) {
-                      final calloutHex = _calloutColor(
-                        cls,
-                        blueHex: blueHex,
-                        purpleHex: purpleHex,
-                        successHex: successHex,
-                        warningHex: warningHex,
-                        dangerHex: dangerHex,
-                      );
-                      return {
-                        'color': calloutHex ?? textHex,
-                        'font-weight': '700',
-                        'margin': '0 0 4px 0',
-                      };
-                    }
-                    return {'color': textHex};
-                  case 'li':
-                    return {'color': textHex};
-                  case 'div':
-                    {
-                      final cls = element.attributes['class'] ?? '';
-                      final calloutHex = _calloutColor(
-                        cls,
-                        blueHex: blueHex,
-                        purpleHex: purpleHex,
-                        successHex: successHex,
-                        warningHex: warningHex,
-                        dangerHex: dangerHex,
-                      );
-                      if (calloutHex == null) return null;
-                      return {
-                        'border-left': '3px solid $calloutHex',
-                        'background-color': panelHex,
-                        'padding': '10px 14px',
-                        'margin': '8px 0',
-                        'color': textHex,
-                      };
-                    }
-                  case 'strong':
-                  case 'b':
-                    return {'color': textHex, 'font-weight': '700'};
-                  case 'em':
-                  case 'i':
-                    return {'color': dimHex};
-                  case 'del':
-                  case 's':
-                    return {'color': dimHex};
-                  case 'blockquote':
-                    return {
-                      'border-left': '3px solid $blueHex',
-                      'background-color': panelHex,
-                      'padding': '10px 14px',
-                      'margin': '8px 0',
-                      'color': dimHex,
-                    };
-                  case 'code':
-                    return {
-                      'color': purpleHex,
-                      'background-color': insetHex,
-                      'font-family': mono.fontFamily ?? '',
-                      'font-size': '${base - 2}px',
-                    };
-                  case 'pre':
-                    return {
-                      'background-color': insetHex,
-                      'border': '1px solid $borderHex',
-                      'padding': '12px',
-                    };
-                  case 'a':
-                    return {'color': blueHex};
-                  case 'hr':
-                    return {
-                      'border': 'none',
-                      'border-top': '1px solid $border2Hex',
-                    };
-                  case 'th':
-                    return {
-                      'color': textHex,
-                      'font-family': mono.fontFamily ?? '',
-                      'font-weight': '600',
-                      'font-size': '${base - 3}px',
-                      'letter-spacing': '0.4px',
-                      'border': 'none',
-                      'border-bottom': '2px solid $blueHex',
-                      'padding': '9px 12px',
-                      'text-align': 'left',
-                    };
-                  case 'td':
-                    return {
-                      'color': textHex,
-                      'font-size': '${base - 2}px',
-                      'border': 'none',
-                      'border-bottom': '1px solid $borderHex',
-                      'padding': '9px 12px',
-                    };
-                  case 'tr':
-                    {
-                      final parent = element.parent;
-                      if (parent == null || parent.localName != 'tbody') {
-                        return null;
+                ),
+                _EditorToolbar(
+                  c: c,
+                  onHeading: _toolbarHeading,
+                  onBold: () => _toolbarWrap('**'),
+                  onItalic: () => _toolbarWrap('_'),
+                  onStrikethrough: () => _toolbarWrap('~~'),
+                  onInlineCode: () => _toolbarWrap('`'),
+                  onCodeBlock: _toolbarCodeBlock,
+                  onQuote: () => _toolbarLinePrefix('> '),
+                  onBulletList: () => _toolbarLinePrefix('- '),
+                  onNumberedList: () => _toolbarLinePrefix('1. '),
+                  onTaskList: () => _toolbarLinePrefix('- [ ] '),
+                  onLink: _toolbarLink,
+                ),
+              ],
+            )
+          : Container(
+              color: c.bg,
+              child: SelectionArea(
+                child: SingleChildScrollView(
+                  padding: const EdgeInsets.fromLTRB(20, 12, 20, 40),
+                  child: HtmlWidget(
+                    html,
+                    factoryBuilder: () => _SvgAwareWidgetFactory(),
+                    textStyle: family.copyWith(
+                      color: textColor,
+                      fontSize: base,
+                      height: 1.65,
+                    ),
+                    onTapUrl: (url) async {
+                      final uri = Uri.tryParse(url);
+                      if (uri != null) await launchUrl(uri);
+                      return true;
+                    },
+                    customWidgetBuilder: (element) {
+                      if (element.localName == 'pre') {
+                        return _buildHighlightedCode(
+                          element: element,
+                          isDark: isDark,
+                          mono: mono,
+                          base: base,
+                          c: c,
+                        );
                       }
-                      final rows = parent.children
-                          .where((e) => e.localName == 'tr')
-                          .toList();
-                      final rowIndex = rows.indexOf(element);
-                      if (rowIndex >= 0 && rowIndex.isOdd) {
-                        return {'background-color': insetHex};
+                      if (element.localName != 'x-latex') return null;
+                      final encoded = element.attributes['data-tex'] ?? '';
+                      final display =
+                          element.attributes['data-mode'] == 'display';
+                      String tex;
+                      try {
+                        tex = utf8.decode(base64Decode(encoded));
+                      } catch (_) {
+                        tex = '';
+                      }
+                      final mathWidget = Math.tex(
+                        tex,
+                        mathStyle: display ? MathStyle.display : MathStyle.text,
+                        textStyle: family.copyWith(
+                          color: textColor,
+                          fontSize: base,
+                        ),
+                        onErrorFallback: (err) => Text(
+                          '⚠ LaTeX 語法錯誤',
+                          style: TextStyle(color: c.mute, fontSize: base - 2),
+                        ),
+                      );
+                      if (!display) return mathWidget;
+                      return Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 8),
+                        child: Center(child: mathWidget),
+                      );
+                    },
+                    customStylesBuilder: (element) {
+                      switch (element.localName) {
+                        case 'x-latex':
+                          return element.attributes['data-mode'] == 'display'
+                              ? {'display': 'block'}
+                              : null;
+                        case 'h1':
+                          return {
+                            'color': textHex,
+                            'font-family': family.fontFamily ?? '',
+                            'font-size': '${base + 10.5}px',
+                            'font-weight': '700',
+                            'border-bottom': '1px solid $border2Hex',
+                            'padding': '0 0 8px 0',
+                            'margin': '4px 0 14px 0',
+                          };
+                        case 'h2':
+                          return {
+                            'color': textHex,
+                            'font-family': family.fontFamily ?? '',
+                            'font-size': '${base + 5.5}px',
+                            'font-weight': '700',
+                            'border-bottom': '1px solid $border2Hex',
+                            'padding': '0 0 6px 0',
+                            'margin': '4px 0 12px 0',
+                          };
+                        case 'h3':
+                          return {
+                            'color': textHex,
+                            'font-family': family.fontFamily ?? '',
+                            'font-size': '${base + 2.5}px',
+                            'font-weight': '600',
+                          };
+                        case 'h4':
+                          return {'color': textHex, 'font-weight': '600'};
+                        case 'h5':
+                          return {
+                            'color': dimHex,
+                            'font-size': '${base - 1.5}px',
+                            'font-weight': '600',
+                          };
+                        case 'h6':
+                          return {
+                            'color': muteHex,
+                            'font-size': '${base - 2.5}px',
+                            'font-weight': '600',
+                          };
+                        case 'p':
+                          final cls = element.attributes['class'] ?? '';
+                          if (cls.contains('-title')) {
+                            final calloutHex = _calloutColor(
+                              cls,
+                              blueHex: blueHex,
+                              purpleHex: purpleHex,
+                              successHex: successHex,
+                              warningHex: warningHex,
+                              dangerHex: dangerHex,
+                            );
+                            return {
+                              'color': calloutHex ?? textHex,
+                              'font-weight': '700',
+                              'margin': '0 0 4px 0',
+                            };
+                          }
+                          return {'color': textHex};
+                        case 'li':
+                          return {'color': textHex};
+                        case 'div':
+                          {
+                            final cls = element.attributes['class'] ?? '';
+                            final calloutHex = _calloutColor(
+                              cls,
+                              blueHex: blueHex,
+                              purpleHex: purpleHex,
+                              successHex: successHex,
+                              warningHex: warningHex,
+                              dangerHex: dangerHex,
+                            );
+                            if (calloutHex == null) return null;
+                            return {
+                              'border-left': '3px solid $calloutHex',
+                              'background-color': panelHex,
+                              'padding': '10px 14px',
+                              'margin': '8px 0',
+                              'color': textHex,
+                            };
+                          }
+                        case 'strong':
+                        case 'b':
+                          return {'color': textHex, 'font-weight': '700'};
+                        case 'em':
+                        case 'i':
+                          return {'color': dimHex};
+                        case 'del':
+                        case 's':
+                          return {'color': dimHex};
+                        case 'blockquote':
+                          return {
+                            'border-left': '3px solid $blueHex',
+                            'background-color': panelHex,
+                            'padding': '10px 14px',
+                            'margin': '8px 0',
+                            'color': dimHex,
+                          };
+                        case 'code':
+                          return {
+                            'color': purpleHex,
+                            'background-color': insetHex,
+                            'font-family': mono.fontFamily ?? '',
+                            'font-size': '${base - 2}px',
+                          };
+                        case 'pre':
+                          return {
+                            'background-color': insetHex,
+                            'border': '1px solid $borderHex',
+                            'padding': '12px',
+                          };
+                        case 'a':
+                          return {'color': blueHex};
+                        case 'hr':
+                          return {
+                            'border': 'none',
+                            'border-top': '1px solid $border2Hex',
+                          };
+                        case 'th':
+                          return {
+                            'color': textHex,
+                            'font-family': mono.fontFamily ?? '',
+                            'font-weight': '600',
+                            'font-size': '${base - 3}px',
+                            'letter-spacing': '0.4px',
+                            'border': 'none',
+                            'border-bottom': '2px solid $blueHex',
+                            'padding': '9px 12px',
+                            'text-align': 'left',
+                          };
+                        case 'td':
+                          return {
+                            'color': textHex,
+                            'font-size': '${base - 2}px',
+                            'border': 'none',
+                            'border-bottom': '1px solid $borderHex',
+                            'padding': '9px 12px',
+                          };
+                        case 'tr':
+                          {
+                            final parent = element.parent;
+                            if (parent == null || parent.localName != 'tbody') {
+                              return null;
+                            }
+                            final rows = parent.children
+                                .where((e) => e.localName == 'tr')
+                                .toList();
+                            final rowIndex = rows.indexOf(element);
+                            if (rowIndex >= 0 && rowIndex.isOdd) {
+                              return {'background-color': insetHex};
+                            }
+                            return null;
+                          }
+                        case 'table':
+                          return {'border': 'none'};
                       }
                       return null;
-                    }
-                  case 'table':
-                    return {'border': 'none'};
-                }
-                return null;
-              },
+                    },
+                  ),
+                ),
+              ),
             ),
-          ),
-        ),
-      ),
     );
   }
 
   void _copyRaw(BuildContext context) {
-    Clipboard.setData(ClipboardData(text: widget.content));
+    Clipboard.setData(
+      ClipboardData(text: _editing ? _editController.text : _content),
+    );
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(content: Text('原始 Markdown 已複製到剪貼簿 (｡•ᴗ•｡)')),
     );
@@ -626,6 +854,87 @@ class _ViewerScreenState extends State<ViewerScreen> {
       builder: (sheetContext) {
         return _ReaderSettingsSheet(prefs: _prefs, onChanged: _updatePrefs);
       },
+    );
+  }
+}
+
+/// A horizontally-scrolling row of Markdown formatting shortcuts, docked
+/// directly above the keyboard (it's the last child in the edit body's
+/// [Column], which the [Scaffold] pushes up above the software keyboard
+/// automatically) so common syntax doesn't have to be typed by hand.
+class _EditorToolbar extends StatelessWidget {
+  final ItouColors c;
+  final VoidCallback onHeading;
+  final VoidCallback onBold;
+  final VoidCallback onItalic;
+  final VoidCallback onStrikethrough;
+  final VoidCallback onInlineCode;
+  final VoidCallback onCodeBlock;
+  final VoidCallback onQuote;
+  final VoidCallback onBulletList;
+  final VoidCallback onNumberedList;
+  final VoidCallback onTaskList;
+  final VoidCallback onLink;
+
+  const _EditorToolbar({
+    required this.c,
+    required this.onHeading,
+    required this.onBold,
+    required this.onItalic,
+    required this.onStrikethrough,
+    required this.onInlineCode,
+    required this.onCodeBlock,
+    required this.onQuote,
+    required this.onBulletList,
+    required this.onNumberedList,
+    required this.onTaskList,
+    required this.onLink,
+  });
+
+  Widget _btn(IconData icon, String tooltip, VoidCallback onTap) {
+    return IconButton(
+      tooltip: tooltip,
+      icon: Icon(icon, size: 20),
+      color: c.text,
+      visualDensity: VisualDensity.compact,
+      constraints: const BoxConstraints(minWidth: 44, minHeight: 44),
+      // Toolbar taps must not steal keyboard focus from the TextField —
+      // handled by the callbacks themselves (they re-request focus after
+      // editing the controller), not by anything here.
+      onPressed: onTap,
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      decoration: BoxDecoration(
+        color: c.panel,
+        border: Border(top: BorderSide(color: c.border)),
+      ),
+      child: SafeArea(
+        top: false,
+        child: SingleChildScrollView(
+          scrollDirection: Axis.horizontal,
+          padding: const EdgeInsets.symmetric(horizontal: 4),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              _btn(Icons.title, '標題', onHeading),
+              _btn(Icons.format_bold, '粗體', onBold),
+              _btn(Icons.format_italic, '斜體', onItalic),
+              _btn(Icons.strikethrough_s, '刪除線', onStrikethrough),
+              _btn(Icons.code, '行內程式碼', onInlineCode),
+              _btn(Icons.data_object, '程式碼區塊', onCodeBlock),
+              _btn(Icons.format_quote, '引用', onQuote),
+              _btn(Icons.format_list_bulleted, '項目清單', onBulletList),
+              _btn(Icons.format_list_numbered, '編號清單', onNumberedList),
+              _btn(Icons.check_box_outlined, '待辦清單', onTaskList),
+              _btn(Icons.link, '連結', onLink),
+            ],
+          ),
+        ),
+      ),
     );
   }
 }
