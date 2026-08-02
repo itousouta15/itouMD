@@ -13,7 +13,7 @@
 | --- | --- | --- |
 | ![精靈式介紹](docs/screenshots/01-onboarding.png) | ![首頁](docs/screenshots/02-home.png) | ![檢視器](docs/screenshots/03-viewer.png) |
 
-| 編輯模式 | HackMD 筆記列表 | 設定 |
+| 編輯模式 | HackMD | 設定 |
 | --- | --- | --- |
 | ![編輯模式](docs/screenshots/04-editor.png) | ![HackMD](docs/screenshots/05-notes.png) | ![設定](docs/screenshots/06-settings.png) |
 
