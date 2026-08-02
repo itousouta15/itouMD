@@ -127,7 +127,8 @@ class _HomeScreenState extends State<HomeScreen> {
       if (!mounted) return;
       final segments = Uri.tryParse(input)?.pathSegments ?? const <String>[];
       final niceTitle =
-          extractDocTitle(text) ?? (segments.isNotEmpty ? segments.last : input);
+          extractDocTitle(text) ??
+          (segments.isNotEmpty ? segments.last : input);
       _openViewer(
         niceTitle,
         text,

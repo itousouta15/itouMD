@@ -25,7 +25,9 @@ String convertMarkdownToHtml(String rawMarkdown) {
 /// metadata that isn't meant to be displayed as document content. Strip it
 /// if present at the very start of the document; anywhere else `---` is
 /// just a horizontal rule, so this only matches when anchored to position 0.
-final _frontMatterPattern = RegExp(r'^---\s*\r?\n[\s\S]*?\r?\n(?:---|\.\.\.)[ \t]*\r?\n?');
+final _frontMatterPattern = RegExp(
+  r'^---\s*\r?\n[\s\S]*?\r?\n(?:---|\.\.\.)[ \t]*\r?\n?',
+);
 
 String _stripFrontMatter(String source) {
   final match = _frontMatterPattern.matchAsPrefix(source);
@@ -76,8 +78,16 @@ String _expandHackmdImageSizes(String source) {
       final width = m.group(3) ?? '';
       final height = m.group(4) ?? '';
       final style = [
-        'width:${width.isEmpty ? 'auto' : width.endsWith('%') ? width : '${width}px'}',
-        'height:${height.isEmpty ? 'auto' : height.endsWith('%') ? height : '${height}px'}',
+        'width:${width.isEmpty
+            ? 'auto'
+            : width.endsWith('%')
+            ? width
+            : '${width}px'}',
+        'height:${height.isEmpty
+            ? 'auto'
+            : height.endsWith('%')
+            ? height
+            : '${height}px'}',
       ].join(';');
       return '<img src="$url" alt="$alt" style="$style" />';
     });
