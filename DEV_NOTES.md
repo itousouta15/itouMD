@@ -1,11 +1,5 @@
 # 開發備忘
 
-## 專案路徑一定要是純 ASCII
-
-`itouMD` 放在含中文字元的路徑下（例如原本的 `itou系列\itouMD`）會讓 `flutter analyze`（Dart analysis server 在 Windows 處理非 ASCII 路徑時會崩潰）跟 Android Gradle 建置都壞掉，這是 Flutter/Gradle 在 Windows 上的已知限制。
-
-**已修正**：把父資料夾從 `itou系列` 改名成 `itouSeries`，專案現在在 `c:\Users\kuora\repo\itouSeries\itouMD`，`flutter analyze` 跟建置都正常了。往後不要再把它搬回中文路徑底下。
-
 ## 模擬器：用 `Pixel_9_std`，不要用 `Pixel_9`
 
 - `Pixel_9`：用的是 Google 較新的「16k page size」實驗性系統映像，這台的 SurfaceView 同步機制有 bug，畫面會整個黑屏

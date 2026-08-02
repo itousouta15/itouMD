@@ -1,5 +1,6 @@
 import 'dart:convert';
 
+import 'package:flutter/foundation.dart' show compute;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_math_fork/flutter_math.dart';
@@ -7,11 +8,9 @@ import 'package:flutter_svg/flutter_svg.dart';
 import 'package:flutter_widget_from_html_core/flutter_widget_from_html_core.dart';
 import 'package:fwfh_svg/fwfh_svg.dart';
 import 'package:http/http.dart' as http;
-import 'package:markdown/markdown.dart' as md;
 import 'package:url_launcher/url_launcher.dart';
 
-import '../services/hackmd_syntax.dart';
-import '../services/latex_preprocessor.dart';
+import '../services/markdown_renderer.dart';
 import '../services/reader_prefs.dart';
 import '../theme.dart';
 import '../widgets/loader_ring.dart';
@@ -222,7 +221,10 @@ class ViewerScreen extends StatefulWidget {
 
 class _ViewerScreenState extends State<ViewerScreen> {
   ReaderPrefs _prefs = const ReaderPrefs();
-  late final String _html;
+  // Parsing runs on a background isolate (see [convertMarkdownToHtml]) so
+  // opening a large document doesn't freeze the navigation transition; null
+  // just means "still converting", shown as a loading state below.
+  String? _html;
 
   @override
   void initState() {
@@ -230,11 +232,9 @@ class _ViewerScreenState extends State<ViewerScreen> {
     ReaderPrefs.load().then((loaded) {
       if (mounted) setState(() => _prefs = loaded);
     });
-    _html = md.markdownToHtml(
-      protectMathAsHtml(injectHackmdToc(widget.content)),
-      extensionSet: md.ExtensionSet.gitHubFlavored,
-      blockSyntaxes: hackmdBlockSyntaxes,
-    );
+    compute(convertMarkdownToHtml, widget.content).then((html) {
+      if (mounted) setState(() => _html = html);
+    });
   }
 
   void _updatePrefs(ReaderPrefs next) {
@@ -242,11 +242,13 @@ class _ViewerScreenState extends State<ViewerScreen> {
     next.save();
   }
 
+  /// Renders as `rgba(...)` rather than hex — several of our theme tokens
+  /// (border, border2, ...) are intentionally translucent, and a plain hex
+  /// string silently drops the alpha channel, turning them fully opaque.
   static String _hex(Color c) {
     int ch(double v) => (v * 255.0).round().clamp(0, 255);
-    return '#${ch(c.r).toRadixString(16).padLeft(2, '0')}'
-        '${ch(c.g).toRadixString(16).padLeft(2, '0')}'
-        '${ch(c.b).toRadixString(16).padLeft(2, '0')}';
+    final a = (c.a).clamp(0.0, 1.0);
+    return 'rgba(${ch(c.r)}, ${ch(c.g)}, ${ch(c.b)}, ${a.toStringAsFixed(3)})';
   }
 
   /// Maps a GitHub-alert (`markdown-alert-note`) or HackMD-container
@@ -269,6 +271,16 @@ class _ViewerScreenState extends State<ViewerScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final html = _html;
+    if (html == null) {
+      return Scaffold(
+        appBar: AppBar(
+          title: Text(widget.title, overflow: TextOverflow.ellipsis),
+        ),
+        body: const Center(child: LoaderRing()),
+      );
+    }
+
     final c = ItouColorsExt.of(context);
     final brightness = Theme.of(context).brightness;
     final family = _prefs.fontFamily.textStyle();
@@ -311,7 +323,7 @@ class _ViewerScreenState extends State<ViewerScreen> {
           child: SingleChildScrollView(
             padding: const EdgeInsets.fromLTRB(20, 12, 20, 40),
             child: HtmlWidget(
-              _html,
+              html,
               factoryBuilder: () => _SvgAwareWidgetFactory(),
               textStyle: family.copyWith(
                 color: textColor,

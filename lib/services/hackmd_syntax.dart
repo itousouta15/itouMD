@@ -32,8 +32,38 @@ class HackmdContainerSyntax extends md.BlockSyntax {
     final customTitle = match.group(2)?.trim();
     parser.advance();
 
+    // Scan for the matching close, ignoring bare `:::` lines that are
+    // actually inside a fenced code block (e.g. a snippet demonstrating this
+    // very syntax) or that close a *nested* container rather than this one.
+    // Without this, a nested `:::spoiler ... :::` inside another container,
+    // or any `:::` shown in an example code fence, would end this block
+    // early and leave the real closing line dangling as stray text.
     final childLines = <md.Line>[];
-    while (!parser.isDone && !_closePattern.hasMatch(parser.current.content)) {
+    var depth = 0;
+    var inFence = false;
+    String? fenceChar;
+    while (!parser.isDone) {
+      final content = parser.current.content;
+      if (!inFence && depth == 0 && _closePattern.hasMatch(content)) break;
+
+      final fenceMatch = _fenceLinePattern.firstMatch(content);
+      if (fenceMatch != null) {
+        final char = fenceMatch.group(1)![0];
+        if (!inFence) {
+          inFence = true;
+          fenceChar = char;
+        } else if (char == fenceChar) {
+          inFence = false;
+          fenceChar = null;
+        }
+      } else if (!inFence) {
+        if (_openPattern.hasMatch(content)) {
+          depth++;
+        } else if (_closePattern.hasMatch(content)) {
+          depth--;
+        }
+      }
+
       childLines.add(parser.current);
       parser.advance();
     }

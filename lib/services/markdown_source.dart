@@ -42,6 +42,34 @@ String normalizeMarkdownUrl(String input) {
   return input.trim();
 }
 
+final _frontMatterBlockPattern = RegExp(r'^---\s*\r?\n([\s\S]*?)\r?\n(?:---|\.\.\.)');
+final _yamlTitleFieldPattern = RegExp(
+  r'''^title\s*:\s*["']?(.+?)["']?\s*$''',
+  multiLine: true,
+  caseSensitive: false,
+);
+final _firstH1Pattern = RegExp(r'^#\s+(.+?)\s*#*\s*$', multiLine: true);
+
+/// Picks a human-readable title for fetched content: the YAML front
+/// matter's `title:` field if present (this is how HackMD notes carry
+/// their real title — the URL itself is just an opaque id, e.g.
+/// `S1mHSwOWll`), otherwise the document's first `# heading`. Returns
+/// `null` (letting the caller fall back to the URL) if neither is found.
+String? extractDocTitle(String content) {
+  final frontMatter = _frontMatterBlockPattern.matchAsPrefix(content);
+  if (frontMatter != null) {
+    final titleMatch = _yamlTitleFieldPattern.firstMatch(frontMatter.group(1)!);
+    final title = titleMatch?.group(1)?.trim();
+    if (title != null && title.isNotEmpty) return title;
+  }
+
+  final h1 = _firstH1Pattern.firstMatch(content);
+  final title = h1?.group(1)?.trim();
+  if (title != null && title.isNotEmpty) return title;
+
+  return null;
+}
+
 Future<String> fetchMarkdownFromUrl(String rawInput) async {
   final url = normalizeMarkdownUrl(rawInput);
   final uri = Uri.tryParse(url);
