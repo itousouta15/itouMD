@@ -50,8 +50,37 @@ jobs:
       - name: Install dependencies
         run: flutter pub get
 
+      # Release signing: the keystore travels as a base64 secret and is
+      # rehydrated here, so the signed APK is reproducible in CI without
+      # ever committing the keystore or its passwords. Machines without the
+      # secrets (forks, first push before setup) fall back to debug signing
+      # automatically — the gradle config already handles a missing
+      # key.properties.
+      - name: Restore release keystore from secrets
+        if: env.ANDROID_KEYSTORE_BASE64 != ''
+        env:
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          echo "$ANDROID_KEYSTORE_BASE64" | base64 -d > android/keystore.jks
+          cat > android/key.properties <<EOF
+          storePassword=$ANDROID_KEYSTORE_PASSWORD
+          keyPassword=$ANDROID_KEY_PASSWORD
+          keyAlias=$ANDROID_KEY_ALIAS
+          storeFile=../keystore.jks
+          EOF
+
       - name: Build APK
         run: flutter build apk --release
+
+      - name: Upload APK artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: itouMD-apk
+          path: build/app/outputs/flutter-apk/app-release.apk
+          if-no-files-found: error
 
   Build-iOS:
     name: Build iOS (no codesign)
