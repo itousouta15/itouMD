@@ -337,7 +337,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      'itouMD 1.0.1',
+                      'itouMD 1.1.0',
                       style: TextStyle(
                         color: c.text,
                         fontSize: 14,
