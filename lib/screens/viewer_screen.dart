@@ -17,12 +17,15 @@ import 'package:html/dom.dart' as dom;
 import 'package:http/http.dart' as http;
 import 'package:url_launcher/url_launcher.dart';
 
+import '../services/hackmd_account.dart';
+import '../services/hackmd_api.dart';
 import '../services/markdown_editor_actions.dart';
 import '../services/markdown_renderer.dart';
 import '../services/reader_prefs.dart';
 import '../services/recent_docs.dart';
 import '../theme.dart';
 import '../widgets/loader_ring.dart';
+import 'hackmd_account_screen.dart';
 
 /// Turns "press Enter on a list item" into "continue the list" instead of a
 /// bare newline — the single biggest bit of editor friction on mobile,
@@ -287,6 +290,19 @@ class _ViewerScreenState extends State<ViewerScreen> {
   late final _editController = TextEditingController(text: widget.content);
   final _editFocusNode = FocusNode();
   bool _editing = false;
+  bool _syncingToHackmd = false;
+  // Resolved lazily on first sync (custom-aliased HackMD URLs need a
+  // notes-list lookup to find their real id) and cached so repeat syncs
+  // don't re-fetch the whole notes list every time.
+  String? _hackmdNoteId;
+
+  /// Whether this doc was fetched from a `hackmd.io` URL — the only source
+  /// a "sync back to the cloud" action makes sense for.
+  bool get _isHackmdDoc {
+    final ref = widget.sourceRef;
+    if (widget.source != RecentDocSource.url || ref == null) return false;
+    return Uri.tryParse(ref)?.host == 'hackmd.io';
+  }
 
   @override
   void initState() {
@@ -418,6 +434,57 @@ class _ViewerScreenState extends State<ViewerScreen> {
       ScaffoldMessenger.of(
         context,
       ).showSnackBar(const SnackBar(content: Text('儲存失敗，再試一次看看 (´;ω;`)')));
+    }
+  }
+
+  Future<void> _syncToHackmd(BuildContext context) async {
+    final ref = widget.sourceRef;
+    final uri = ref == null ? null : Uri.tryParse(ref);
+    if (uri == null) return;
+
+    final token = await HackmdAccount.getToken();
+    if (!context.mounted) return;
+    if (token == null || token.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: const Text('還沒連結 HackMD 帳號'),
+          action: SnackBarAction(
+            label: '設定',
+            onPressed: () => Navigator.of(context).push(
+              MaterialPageRoute(builder: (_) => const HackmdAccountScreen()),
+            ),
+          ),
+        ),
+      );
+      return;
+    }
+
+    setState(() => _syncingToHackmd = true);
+    try {
+      var noteId = _hackmdNoteId;
+      noteId ??= await HackmdApi.resolveNoteId(token, uri);
+      if (noteId == null) {
+        throw HackmdApiException('在你的 HackMD 帳號裡找不到這篇筆記 (´;ω;`)');
+      }
+      _hackmdNoteId = noteId;
+      final text = _editing ? _editController.text : _content;
+      await HackmdApi.updateNoteContent(token, noteId, text);
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('已同步到 HackMD (｡•ᴗ•｡)')));
+    } on HackmdApiException catch (e) {
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(e.message)));
+    } catch (_) {
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('同步失敗，再試一次看看 (´;ω;`)')));
+    } finally {
+      if (mounted) setState(() => _syncingToHackmd = false);
     }
   }
 
@@ -553,6 +620,18 @@ class _ViewerScreenState extends State<ViewerScreen> {
             icon: const Icon(Icons.save_alt_outlined),
             onPressed: () => _saveAs(context),
           ),
+          if (_isHackmdDoc)
+            IconButton(
+              tooltip: '同步到 HackMD',
+              icon: _syncingToHackmd
+                  ? const SizedBox(
+                      width: 20,
+                      height: 20,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : const Icon(Icons.cloud_upload_outlined),
+              onPressed: _syncingToHackmd ? null : () => _syncToHackmd(context),
+            ),
           if (!_editing) ...[
             IconButton(
               tooltip: '顯示設定',
