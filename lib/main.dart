@@ -3,10 +3,12 @@ import 'package:sentry_flutter/sentry_flutter.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'screens/home_screen.dart';
+import 'screens/onboarding_screen.dart';
 import 'services/ui_prefs.dart';
 import 'theme.dart';
 
 const _themePrefKey = 'itou_md_theme_mode';
+const _onboardingDoneKey = 'itou_md_onboarding_done';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -24,11 +26,18 @@ Future<void> main() async {
     );
   }
 
-  runApp(const ItouMdApp());
+  // Resolve the first-launch flag before runApp so the correct root screen
+  // is chosen up front — no flash of the home screen before the wizard.
+  final prefs = await SharedPreferences.getInstance();
+  final onboardingDone = prefs.getBool(_onboardingDoneKey) ?? false;
+
+  runApp(ItouMdApp(onboardingDone: onboardingDone));
 }
 
 class ItouMdApp extends StatefulWidget {
-  const ItouMdApp({super.key});
+  final bool onboardingDone;
+
+  const ItouMdApp({super.key, required this.onboardingDone});
 
   @override
   State<ItouMdApp> createState() => _ItouMdAppState();
@@ -37,6 +46,7 @@ class ItouMdApp extends StatefulWidget {
 class _ItouMdAppState extends State<ItouMdApp> {
   ThemeMode _themeMode = ThemeMode.dark;
   UiScale _uiScale = UiScale.standard;
+  late bool _onboardingDone = widget.onboardingDone;
 
   @override
   void initState() {
@@ -75,6 +85,13 @@ class _ItouMdAppState extends State<ItouMdApp> {
     UiPrefs.save(next);
   }
 
+  Future<void> _finishOnboarding() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_onboardingDoneKey, true);
+    if (!mounted) return;
+    setState(() => _onboardingDone = true);
+  }
+
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
@@ -102,12 +119,14 @@ class _ItouMdAppState extends State<ItouMdApp> {
           child: child!,
         ),
       ),
-      home: HomeScreen(
-        themeMode: _themeMode,
-        onToggleTheme: _toggleTheme,
-        uiScale: _uiScale,
-        onUiScaleChanged: _setUiScale,
-      ),
+      home: _onboardingDone
+          ? HomeScreen(
+              themeMode: _themeMode,
+              onToggleTheme: _toggleTheme,
+              uiScale: _uiScale,
+              onUiScaleChanged: _setUiScale,
+            )
+          : OnboardingScreen(onDone: _finishOnboarding),
     );
   }
 }
