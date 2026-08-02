@@ -54,6 +54,18 @@ class _ItouMdAppState extends State<ItouMdApp> {
       themeMode: _themeMode,
       theme: ItouTheme.lightTheme,
       darkTheme: ItouTheme.darkTheme,
+      // MaterialApp swaps theme/darkTheme instantly; re-theme the actual
+      // content under an AnimatedTheme (using the same resolved ThemeData)
+      // so every Theme.of(context)-based colour — including our ItouColors
+      // extension — crossfades instead of snapping.
+      builder: (context, child) => AnimatedTheme(
+        data: _themeMode == ThemeMode.dark
+            ? ItouTheme.darkTheme
+            : ItouTheme.lightTheme,
+        duration: const Duration(milliseconds: 320),
+        curve: Curves.easeInOut,
+        child: child!,
+      ),
       home: HomeScreen(themeMode: _themeMode, onToggleTheme: _toggleTheme),
     );
   }

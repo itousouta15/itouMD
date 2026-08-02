@@ -41,7 +41,7 @@ class RecentDoc {
 
 class RecentDocs {
   static const _key = 'recent_docs';
-  static const maxEntries = 15;
+  static const maxEntries = 5;
 
   static Future<List<RecentDoc>> load() async {
     final prefs = await SharedPreferences.getInstance();
