@@ -7,6 +7,7 @@ import '../services/markdown_source.dart';
 import '../services/recent_docs.dart';
 import '../theme.dart';
 import '../widgets/loader_ring.dart';
+import 'hackmd_account_screen.dart';
 import 'viewer_screen.dart';
 
 class HomeScreen extends StatefulWidget {
@@ -166,6 +167,11 @@ class _HomeScreenState extends State<HomeScreen> {
                 c: c,
                 isDark: isDark,
                 onToggleTheme: widget.onToggleTheme,
+                onOpenAccount: () => Navigator.of(context).push(
+                  MaterialPageRoute(
+                    builder: (_) => const HackmdAccountScreen(),
+                  ),
+                ),
               ),
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 20),
@@ -333,11 +339,13 @@ class _Header extends StatefulWidget {
   final ItouColors c;
   final bool isDark;
   final VoidCallback onToggleTheme;
+  final VoidCallback onOpenAccount;
 
   const _Header({
     required this.c,
     required this.isDark,
     required this.onToggleTheme,
+    required this.onOpenAccount,
   });
 
   @override
@@ -412,6 +420,11 @@ class _HeaderState extends State<_Header> {
                 ),
               ],
             ),
+          ),
+          IconButton(
+            tooltip: 'HackMD 帳號',
+            icon: Icon(Icons.cloud_outlined, color: c.dim),
+            onPressed: widget.onOpenAccount,
           ),
           IconButton(
             tooltip: isDark ? '切換亮色' : '切換暗色',
