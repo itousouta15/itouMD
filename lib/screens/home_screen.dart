@@ -413,7 +413,7 @@ class _HeaderState extends State<_Header> {
                   ),
                 ),
                 Text(
-                  '手機也能好好看 Markdown (｡•ᴗ•｡)',
+                  '手機也能好好用 MD (｡•ᴗ•｡)',
                   maxLines: 2,
                   overflow: TextOverflow.ellipsis,
                   style: TextStyle(color: c.dim, fontSize: 13, height: 1.4),
