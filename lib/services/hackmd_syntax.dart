@@ -185,7 +185,9 @@ String injectHackmdToc(String source) {
 
   var toc = '';
   if (headings.isNotEmpty) {
-    final minLevel = headings.map((h) => h.level).reduce((a, b) => a < b ? a : b);
+    final minLevel = headings
+        .map((h) => h.level)
+        .reduce((a, b) => a < b ? a : b);
     toc = [
       for (final h in headings)
         '${'  ' * (h.level - minLevel)}- [${h.text}](#${h.slug})',
