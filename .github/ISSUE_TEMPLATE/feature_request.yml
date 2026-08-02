@@ -1,0 +1,52 @@
+name: ✨ 功能建議
+description: 提出新功能或改善建議
+title: "[Feature] "
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        謝謝你提出想法！請先在 [Issues](https://github.com/itousouta15/itouMD/issues) 搜尋是否已有類似建議。
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: 想解決的問題 / 使用情境
+      description: 目前遇到什麼不方便的地方？
+      placeholder: 例如：編輯長文件時很難快速跳到某個標題
+    validations:
+      required: true
+
+  - type: textarea
+    id: solution
+    attributes:
+      label: 建議的解法
+      description: 如果已經有想法，歡迎具體描述；沒有的話留空也沒關係
+    validations:
+      required: false
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: 考慮過的其他方案
+    validations:
+      required: false
+
+  - type: dropdown
+    id: willing-to-pr
+    attributes:
+      label: 願意自己實作並送 PR 嗎？
+      options:
+        - "願意"
+        - "願意，但需要一些指引"
+        - "不方便，希望有人幫忙實作"
+    validations:
+      required: true
+
+  - type: textarea
+    id: extra
+    attributes:
+      label: 其他資訊
+      description: 相關截圖、參考連結等
+    validations:
+      required: false
