@@ -341,22 +341,34 @@ class _Header extends StatelessWidget {
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          Padding(
+            padding: const EdgeInsets.only(top: 4),
+            child: Image.asset(
+              isDark ? 'assets/logo/logo_nbg.webp' : 'assets/logo/logo_wtnbg.webp',
+              height: 50,
+            ),
+          ),
+          const SizedBox(width: 14),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(
-                  'ITOU MD',
-                  style: mono.copyWith(
-                    color: c.text,
-                    fontSize: 21,
-                    letterSpacing: 2,
-                    fontWeight: FontWeight.w700,
+                Padding(
+                  padding: const EdgeInsets.only(top: 4),
+                  child: Text(
+                    'itouMD',
+                    style: mono.copyWith(
+                      color: c.text,
+                      fontSize: 20,
+                      letterSpacing: 2,
+                      fontWeight: FontWeight.w700,
+                    ),
                   ),
                 ),
-                const SizedBox(height: 6),
                 Text(
-                  '手機上也能好好看 Markdown (｡•ᴗ•｡)',
+                  '手機也能好好看 Markdown (｡•ᴗ•｡)',
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
                   style: TextStyle(color: c.dim, fontSize: 13, height: 1.4),
                 ),
               ],

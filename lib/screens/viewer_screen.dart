@@ -33,6 +33,20 @@ class _SvgAwareWidgetFactory extends WidgetFactory with SvgFactory {
     }
     return super.buildImageWidget(tree, src);
   }
+
+  /// `[TOC]`-generated links point at `#slug` anchors; the `markdown`
+  /// package percent-encodes non-ASCII link destinations (so CJK slugs come
+  /// through as `#%E7%AC%AC...`), but the `<a id>` anchors injected by
+  /// [injectHackmdToc] keep the raw text. Decode before handing off to the
+  /// anchor registry so the two actually match up.
+  @override
+  Future<bool> onTapUrl(String url) async {
+    if (url.startsWith('#')) {
+      final id = Uri.decodeComponent(url.substring(1));
+      return onTapAnchorWrapper(id);
+    }
+    return super.onTapUrl(url);
+  }
 }
 
 class _SniffedNetworkImage extends StatefulWidget {
@@ -217,7 +231,7 @@ class _ViewerScreenState extends State<ViewerScreen> {
       if (mounted) setState(() => _prefs = loaded);
     });
     _html = md.markdownToHtml(
-      protectMathAsHtml(widget.content),
+      protectMathAsHtml(injectHackmdToc(widget.content)),
       extensionSet: md.ExtensionSet.gitHubFlavored,
       blockSyntaxes: hackmdBlockSyntaxes,
     );
@@ -346,6 +360,9 @@ class _ViewerScreenState extends State<ViewerScreen> {
                       'font-family': family.fontFamily ?? '',
                       'font-size': '${base + 10.5}px',
                       'font-weight': '700',
+                      'border-bottom': '1px solid $border2Hex',
+                      'padding': '0 0 8px 0',
+                      'margin': '4px 0 14px 0',
                     };
                   case 'h2':
                     return {
@@ -353,6 +370,9 @@ class _ViewerScreenState extends State<ViewerScreen> {
                       'font-family': family.fontFamily ?? '',
                       'font-size': '${base + 5.5}px',
                       'font-weight': '700',
+                      'border-bottom': '1px solid $border2Hex',
+                      'padding': '0 0 6px 0',
+                      'margin': '4px 0 12px 0',
                     };
                   case 'h3':
                     return {
@@ -455,20 +475,40 @@ class _ViewerScreenState extends State<ViewerScreen> {
                   case 'th':
                     return {
                       'color': textHex,
+                      'font-family': mono.fontFamily ?? '',
                       'font-weight': '600',
                       'font-size': '${base - 3}px',
-                      'border': '1px solid $borderHex',
-                      'padding': '8px 10px',
+                      'letter-spacing': '0.4px',
+                      'border': 'none',
+                      'border-bottom': '2px solid $blueHex',
+                      'padding': '9px 12px',
+                      'text-align': 'left',
                     };
                   case 'td':
                     return {
                       'color': textHex,
                       'font-size': '${base - 2}px',
-                      'border': '1px solid $borderHex',
-                      'padding': '8px 10px',
+                      'border': 'none',
+                      'border-bottom': '1px solid $borderHex',
+                      'padding': '9px 12px',
                     };
+                  case 'tr':
+                    {
+                      final parent = element.parent;
+                      if (parent == null || parent.localName != 'tbody') {
+                        return null;
+                      }
+                      final rows = parent.children
+                          .where((e) => e.localName == 'tr')
+                          .toList();
+                      final rowIndex = rows.indexOf(element);
+                      if (rowIndex >= 0 && rowIndex.isOdd) {
+                        return {'background-color': insetHex};
+                      }
+                      return null;
+                    }
                   case 'table':
-                    return {'border': '1px solid $borderHex'};
+                    return {'border': 'none'};
                 }
                 return null;
               },
