@@ -23,6 +23,7 @@ import '../services/markdown_editor_actions.dart';
 import '../services/markdown_renderer.dart';
 import '../services/reader_prefs.dart';
 import '../services/recent_docs.dart';
+import '../services/sync_prefs.dart';
 import '../theme.dart';
 import '../widgets/loader_ring.dart';
 import 'hackmd_account_screen.dart';
@@ -291,10 +292,18 @@ class _ViewerScreenState extends State<ViewerScreen> {
   final _editFocusNode = FocusNode();
   bool _editing = false;
   bool _syncingToHackmd = false;
-  // Resolved lazily on first sync (custom-aliased HackMD URLs need a
-  // notes-list lookup to find their real id) and cached so repeat syncs
-  // don't re-fetch the whole notes list every time.
-  String? _hackmdNoteId;
+  // Resolved lazily on first sync/open-refresh (custom-aliased HackMD URLs
+  // need a notes-list lookup to find their real id, and team notes need the
+  // team path too) and cached so repeat syncs don't re-fetch everything.
+  ResolvedNote? _hackmdResolved;
+  // The cloud copy this viewer was *loaded* with (`widget.content`). The
+  // sync conflict check compares the current remote against this — not
+  // against the user's in-progress edits — so editing locally without
+  // anyone else touching the note still syncs cleanly. Deliberately NOT
+  // updated by the open-time auto-refresh: if the remote changed after this
+  // note was loaded, the conflict warning must still fire, even when the
+  // app already auto-loaded the newer copy.
+  late String _baselineContent = widget.content;
 
   /// Whether this doc was fetched from a `hackmd.io` URL — the only source
   /// a "sync back to the cloud" action makes sense for.
@@ -311,6 +320,7 @@ class _ViewerScreenState extends State<ViewerScreen> {
       if (mounted) setState(() => _prefs = loaded);
     });
     _render(_content);
+    _maybeRefreshFromCloud();
   }
 
   @override
@@ -318,6 +328,79 @@ class _ViewerScreenState extends State<ViewerScreen> {
     _editController.dispose();
     _editFocusNode.dispose();
     super.dispose();
+  }
+
+  /// Pulls the freshest cloud copy of a HackMD note when the doc is opened,
+  /// so the user always sees the latest content even if a recent-docs copy
+  /// is stale. Only refreshes when the doc is a HackMD note, the account is
+  /// linked, and the user hasn't already started editing the cached copy.
+  /// Failures (offline, note not owned by this account) are silent — the
+  /// cached copy stays. The refresh updates what's displayed but NOT
+  /// [_baselineContent], so the sync conflict check can still warn when the
+  /// remote moved on after this note was loaded.
+  Future<void> _maybeRefreshFromCloud() async {
+    if (!_isHackmdDoc) return;
+    final autoRefresh = await SyncPrefs.autoRefreshOnOpen;
+    if (!mounted) return;
+    if (!autoRefresh) return;
+    final token = await HackmdAccount.getToken();
+    if (!mounted) return;
+    if (token == null || token.isEmpty) return;
+
+    try {
+      final uri = Uri.parse(widget.sourceRef!);
+      final resolved = await HackmdApi.resolveNoteId(token, uri);
+      if (resolved == null) return;
+      _hackmdResolved = resolved;
+      final note = resolved.teamPath != null
+          ? await HackmdApi.getTeamNote(
+              token,
+              resolved.teamPath!,
+              resolved.noteId,
+            )
+          : await HackmdApi.getNote(token, resolved.noteId);
+      if (!mounted || _editing) return;
+      if (note.content != _content) {
+        setState(() {
+          _content = note.content;
+          _editController.text = note.content;
+        });
+        _render(note.content);
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('已更新為最新內容 (｡•ᴗ•｡)')),
+        );
+      }
+    } on HackmdApiException {
+      // Offline, token invalid, or not this account's note — keep cached.
+    } catch (_) {
+      // Same: any failure falls back to the cached copy.
+    }
+  }
+
+  /// Asks before overwriting a remote note that changed since this doc was
+  /// opened. Returns `true` when the user explicitly accepts the overwrite.
+  Future<bool> _confirmOverwrite(BuildContext context) async {
+    final proceed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('這篇筆記在別處被改過了'),
+        content: const Text(
+          '雲端上的版本跟你開啟時看到的不一樣。現在把內容蓋過去，'
+          '可能弄丟別人（或你其他裝置／網頁版）的新變更。',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(false),
+            child: const Text('取消'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(true),
+            child: const Text('還是要蓋過去'),
+          ),
+        ],
+      ),
+    );
+    return proceed ?? false;
   }
 
   /// Applies a pure [EditResult] to the controller and hands focus straight
@@ -461,14 +544,51 @@ class _ViewerScreenState extends State<ViewerScreen> {
 
     setState(() => _syncingToHackmd = true);
     try {
-      var noteId = _hackmdNoteId;
-      noteId ??= await HackmdApi.resolveNoteId(token, uri);
-      if (noteId == null) {
+      var resolved = _hackmdResolved;
+      resolved ??= await HackmdApi.resolveNoteId(token, uri);
+      if (resolved == null) {
         throw HackmdApiException('在你的 HackMD 帳號裡找不到這篇筆記 (´;ω;`)');
       }
-      _hackmdNoteId = noteId;
+      _hackmdResolved = resolved;
+
+      final remote = resolved.teamPath != null
+          ? await HackmdApi.getTeamNote(
+              token,
+              resolved.teamPath!,
+              resolved.noteId,
+            )
+          : await HackmdApi.getNote(token, resolved.noteId);
+
+      // The remote moved on since we opened this doc (edited on the web, on
+      // another device, by a teammate...). Overwriting blindly would destroy
+      // those newer changes, so confirm first unless the user set a default.
+      if (remote.content != _baselineContent) {
+        final resolution = await SyncPrefs.conflictResolution;
+        if (!context.mounted) return;
+        switch (resolution) {
+          case ConflictResolution.cancel:
+            return;
+          case ConflictResolution.ask:
+            final proceed = await _confirmOverwrite(context);
+            if (!context.mounted) return;
+            if (!proceed) return;
+          case ConflictResolution.overwrite:
+            break;
+        }
+      }
+
       final text = _editing ? _editController.text : _content;
-      await HackmdApi.updateNoteContent(token, noteId, text);
+      if (resolved.teamPath != null) {
+        await HackmdApi.updateTeamNoteContent(
+          token,
+          resolved.teamPath!,
+          resolved.noteId,
+          text,
+        );
+      } else {
+        await HackmdApi.updateNoteContent(token, resolved.noteId, text);
+      }
+      _baselineContent = text;
       if (!context.mounted) return;
       ScaffoldMessenger.of(
         context,
@@ -590,7 +710,7 @@ class _ViewerScreenState extends State<ViewerScreen> {
     final isDark = brightness == Brightness.dark;
     final family = _prefs.fontFamily.textStyle();
     final mono = ReaderFontFamily.mono.textStyle();
-    final textColor = _prefs.textColor.resolve(c, brightness);
+    final textColor = _prefs.textColor.resolve(c, brightness, _prefs.customColor);
     final base = _prefs.fontSize;
 
     final textHex = _hex(textColor);
@@ -1103,35 +1223,44 @@ class _ReaderSettingsSheetState extends State<_ReaderSettingsSheet> {
             const SizedBox(height: 10),
             SectionLabel('文字顏色'),
             const SizedBox(height: 12),
-            Row(
+            Wrap(
+              spacing: 8,
+              runSpacing: 10,
               children: ReaderTextColor.values.map((tc) {
                 final selected = _prefs.textColor == tc;
-                final swatch = tc.resolve(c, brightness);
-                return Padding(
-                  padding: const EdgeInsets.only(right: 14),
-                  child: GestureDetector(
-                    onTap: () => _update(_prefs.copyWith(textColor: tc)),
-                    child: Column(
-                      children: [
-                        Container(
-                          width: 32,
-                          height: 32,
-                          decoration: BoxDecoration(
-                            color: swatch,
-                            shape: BoxShape.circle,
-                            border: Border.all(
-                              color: selected ? c.blue : c.border2,
-                              width: selected ? 2.5 : 1,
-                            ),
+                final swatch = tc == ReaderTextColor.custom
+                    ? _prefs.customColor
+                    : tc.resolve(c, brightness);
+                return GestureDetector(
+                  onTap: () => _update(_prefs.copyWith(textColor: tc)),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Container(
+                        width: 24,
+                        height: 24,
+                        decoration: BoxDecoration(
+                          color: swatch,
+                          shape: BoxShape.circle,
+                          border: Border.all(
+                            color: selected ? c.blue : c.border2,
+                            width: selected ? 2.5 : 1,
                           ),
                         ),
-                        const SizedBox(height: 6),
-                        Text(
-                          tc.label,
-                          style: TextStyle(color: c.dim, fontSize: 11),
+                        child: tc == ReaderTextColor.custom
+                            ? const Icon(Icons.add, size: 14, color: Colors.white)
+                            : null,
+                      ),
+                      const SizedBox(width: 4),
+                      Text(
+                        tc.label,
+                        style: TextStyle(
+                          color: selected ? c.text : c.dim,
+                          fontSize: 12,
+                          fontWeight: selected ? FontWeight.w600 : FontWeight.w400,
                         ),
-                      ],
-                    ),
+                      ),
+                    ],
                   ),
                 );
               }).toList(),
