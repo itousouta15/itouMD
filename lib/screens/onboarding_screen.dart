@@ -148,8 +148,12 @@ class _OnboardingScreenState extends State<OnboardingScreen>
               padding: const EdgeInsets.fromLTRB(24, 20, 24, 24),
               child: SizedBox(
                 width: double.infinity,
-                height: 48,
+                // No fixed height — a tall UI text scale would clip the
+                // label; padding grows with the text instead.
                 child: ElevatedButton(
+                  style: ElevatedButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(vertical: 14),
+                  ),
                   onPressed: _next,
                   child: Text(_isLast ? '開始使用' : '下一步'),
                 ),
