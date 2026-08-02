@@ -2,12 +2,16 @@ import 'dart:convert';
 
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
+import 'package:url_launcher/url_launcher.dart';
 
+import '../services/hackmd_account.dart';
 import '../services/markdown_source.dart';
 import '../services/recent_docs.dart';
 import '../theme.dart';
 import '../widgets/loader_ring.dart';
 import 'hackmd_account_screen.dart';
+import 'hackmd_notes_screen.dart';
+import 'settings_screen.dart';
 import 'viewer_screen.dart';
 
 class HomeScreen extends StatefulWidget {
@@ -121,6 +125,28 @@ class _HomeScreenState extends State<HomeScreen> {
     }
   }
 
+  Future<void> _openHackmdNotes() async {
+    final token = await HackmdAccount.getToken();
+    if (!mounted) return;
+    if (token == null || token.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: const Text('還沒連結 HackMD 帳號'),
+          action: SnackBarAction(
+            label: '設定',
+            onPressed: () => Navigator.of(context).push(
+              MaterialPageRoute(builder: (_) => const HackmdAccountScreen()),
+            ),
+          ),
+        ),
+      );
+      return;
+    }
+    await Navigator.of(context).push(
+      MaterialPageRoute(builder: (_) => const HackmdNotesScreen()),
+    );
+  }
+
   Future<void> _fetchUrl() async {
     final input = _urlController.text.trim();
     if (input.isEmpty) return;
@@ -166,10 +192,12 @@ class _HomeScreenState extends State<HomeScreen> {
               _Header(
                 c: c,
                 isDark: isDark,
-                onToggleTheme: widget.onToggleTheme,
-                onOpenAccount: () => Navigator.of(context).push(
+                onOpenSettings: () => Navigator.of(context).push(
                   MaterialPageRoute(
-                    builder: (_) => const HackmdAccountScreen(),
+                    builder: (_) => SettingsScreen(
+                      themeMode: widget.themeMode,
+                      onToggleTheme: widget.onToggleTheme,
+                    ),
                   ),
                 ),
               ),
@@ -317,11 +345,49 @@ class _HomeScreenState extends State<HomeScreen> {
                         ],
                       ),
                     ),
+                    const SizedBox(height: 20),
+
+                    _StepCard(
+                      step: '04',
+                      title: '瀏覽我的 HackMD 筆記',
+                      accent: c.blue,
+                      child: ElevatedButton.icon(
+                        onPressed: _openHackmdNotes,
+                        icon: const Icon(Icons.cloud_queue_outlined, size: 18),
+                        label: const Text('開啟筆記列表'),
+                      ),
+                    ),
                     const SizedBox(height: 36),
                     Center(
-                      child: Text(
-                        '(´,,•ω•,,)♡ itouMD',
-                        style: TextStyle(color: c.mute, fontSize: 11),
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          GestureDetector(
+                            onTap: () => launchUrl(Uri.parse('https://itousouta.me')),
+                            child: Text.rich(
+                              TextSpan(
+                                children: [
+                                  TextSpan(
+                                    text: 'Made with ♥ by ',
+                                    style: TextStyle(color: c.mute, fontSize: 11),
+                                  ),
+                                  TextSpan(
+                                    text: 'itouSouta',
+                                    style: TextStyle(color: c.blue, fontSize: 11),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                          const SizedBox(height: 6),
+                          GestureDetector(
+                            onTap: () => launchUrl(Uri.parse('https://github.com/itouSouta/itouMD')),
+                            child: Text(
+                              '如果喜歡的話歡迎到 GitHub 給個 star ♡',
+                              style: TextStyle(color: c.mute, fontSize: 11),
+                            ),
+                          ),
+                        ],
                       ),
                     ),
                   ],
@@ -338,14 +404,12 @@ class _HomeScreenState extends State<HomeScreen> {
 class _Header extends StatefulWidget {
   final ItouColors c;
   final bool isDark;
-  final VoidCallback onToggleTheme;
-  final VoidCallback onOpenAccount;
+  final VoidCallback onOpenSettings;
 
   const _Header({
     required this.c,
     required this.isDark,
-    required this.onToggleTheme,
-    required this.onOpenAccount,
+    required this.onOpenSettings,
   });
 
   @override
@@ -371,7 +435,6 @@ class _HeaderState extends State<_Header> {
   @override
   Widget build(BuildContext context) {
     final c = widget.c;
-    final isDark = widget.isDark;
     final mono = Theme.of(context).textTheme.labelSmall!;
     return Padding(
       padding: const EdgeInsets.fromLTRB(20, 20, 20, 28),
@@ -413,7 +476,7 @@ class _HeaderState extends State<_Header> {
                   ),
                 ),
                 Text(
-                  '手機也能好好用 MD (｡•ᴗ•｡)',
+                  '手機也能好好用 Markdown (｡•ᴗ•｡)',
                   maxLines: 2,
                   overflow: TextOverflow.ellipsis,
                   style: TextStyle(color: c.dim, fontSize: 13, height: 1.4),
@@ -422,17 +485,9 @@ class _HeaderState extends State<_Header> {
             ),
           ),
           IconButton(
-            tooltip: 'HackMD 帳號',
-            icon: Icon(Icons.cloud_outlined, color: c.dim),
-            onPressed: widget.onOpenAccount,
-          ),
-          IconButton(
-            tooltip: isDark ? '切換亮色' : '切換暗色',
-            icon: Icon(
-              isDark ? Icons.dark_mode_outlined : Icons.light_mode_outlined,
-              color: c.dim,
-            ),
-            onPressed: widget.onToggleTheme,
+            tooltip: '設定',
+            icon: Icon(Icons.settings_outlined, color: c.dim),
+            onPressed: widget.onOpenSettings,
           ),
         ],
       ),
