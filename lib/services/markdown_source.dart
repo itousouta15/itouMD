@@ -42,7 +42,9 @@ String normalizeMarkdownUrl(String input) {
   return input.trim();
 }
 
-final _frontMatterBlockPattern = RegExp(r'^---\s*\r?\n([\s\S]*?)\r?\n(?:---|\.\.\.)');
+final _frontMatterBlockPattern = RegExp(
+  r'^---\s*\r?\n([\s\S]*?)\r?\n(?:---|\.\.\.)',
+);
 final _yamlTitleFieldPattern = RegExp(
   r'''^title\s*:\s*["']?(.+?)["']?\s*$''',
   multiLine: true,
