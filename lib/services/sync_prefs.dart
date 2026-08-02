@@ -19,7 +19,9 @@ class SyncPrefs {
   static Future<ConflictResolution> get conflictResolution async {
     final prefs = await SharedPreferences.getInstance();
     final index = prefs.getInt(_conflictKey) ?? 0;
-    if (index >= ConflictResolution.values.length) return ConflictResolution.ask;
+    if (index >= ConflictResolution.values.length) {
+      return ConflictResolution.ask;
+    }
     return ConflictResolution.values[index];
   }
 
