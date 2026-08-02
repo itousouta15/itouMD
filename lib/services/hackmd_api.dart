@@ -49,6 +49,15 @@ class HackmdNote {
     userPath: json['userPath'] as String?,
     teamPath: json['teamPath'] as String?,
   );
+
+  Map<String, dynamic> toJson() => {
+    'id': id,
+    'content': content,
+    'title': title,
+    'permalink': permalink,
+    'userPath': userPath,
+    'teamPath': teamPath,
+  };
 }
 
 class HackmdTeam {
@@ -65,6 +74,8 @@ class HackmdTeam {
     path: (json['path'] as String?) ?? (json['name'] as String?) ?? '',
     name: json['name'] as String?,
   );
+
+  Map<String, dynamic> toJson() => {'id': id, 'path': path, 'name': name};
 
   /// The `@slug` used in `hackmd.io/@slug/...` note URLs — the same value
   /// the API wants in `/v1/teams/{teamPath}/...`.
