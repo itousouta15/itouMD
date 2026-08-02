@@ -147,9 +147,7 @@ class ItouTheme {
           foregroundColor: c.text,
           elevation: 0,
           side: BorderSide(color: c.border2),
-          shape: const RoundedRectangleBorder(
-            borderRadius: BorderRadius.zero,
-          ),
+          shape: const RoundedRectangleBorder(borderRadius: BorderRadius.zero),
           padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 20),
           textStyle: GoogleFonts.jetBrainsMono(
             fontSize: 13,
@@ -166,8 +164,7 @@ class ItouTheme {
   }
 
   static ThemeData get darkTheme => _build(ItouColors.dark, Brightness.dark);
-  static ThemeData get lightTheme =>
-      _build(ItouColors.light, Brightness.light);
+  static ThemeData get lightTheme => _build(ItouColors.light, Brightness.light);
 }
 
 extension ItouColorsExt on ItouColors {

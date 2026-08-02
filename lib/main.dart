@@ -35,8 +35,9 @@ class _ItouMdAppState extends State<ItouMdApp> {
   }
 
   Future<void> _toggleTheme() async {
-    final next =
-        _themeMode == ThemeMode.dark ? ThemeMode.light : ThemeMode.dark;
+    final next = _themeMode == ThemeMode.dark
+        ? ThemeMode.light
+        : ThemeMode.dark;
     setState(() => _themeMode = next);
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString(

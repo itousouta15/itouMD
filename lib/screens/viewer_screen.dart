@@ -25,7 +25,11 @@ class _SvgAwareWidgetFactory extends WidgetFactory with SvgFactory {
   Widget? buildImageWidget(BuildTree tree, ImageSource src) {
     final url = src.url;
     if (url.startsWith('http://') || url.startsWith('https://')) {
-      return _SniffedNetworkImage(url: url, width: src.width, height: src.height);
+      return _SniffedNetworkImage(
+        url: url,
+        width: src.width,
+        height: src.height,
+      );
     }
     return super.buildImageWidget(tree, src);
   }
@@ -60,7 +64,10 @@ class _SniffedNetworkImageState extends State<_SniffedNetworkImage> {
 
   bool _looksLikeSvg(Uint8List bytes) {
     final sample = bytes.length > 300 ? bytes.sublist(0, 300) : bytes;
-    final head = utf8.decode(sample, allowMalformed: true).trimLeft().toLowerCase();
+    final head = utf8
+        .decode(sample, allowMalformed: true)
+        .trimLeft()
+        .toLowerCase();
     return head.startsWith('<svg') || head.startsWith('<?xml');
   }
 
@@ -125,7 +132,11 @@ class _SniffedNetworkImageState extends State<_SniffedNetworkImage> {
       '<svg',
       '<svg viewBox="0 0 ${w.group(1)} ${h.group(1)}"',
     );
-    final patchedText = text.replaceRange(tagMatch.start, tagMatch.end, patchedTag);
+    final patchedText = text.replaceRange(
+      tagMatch.start,
+      tagMatch.end,
+      patchedTag,
+    );
     return Uint8List.fromList(utf8.encode(patchedText));
   }
 
@@ -437,7 +448,10 @@ class _ViewerScreenState extends State<ViewerScreen> {
                   case 'a':
                     return {'color': blueHex};
                   case 'hr':
-                    return {'border': 'none', 'border-top': '1px solid $border2Hex'};
+                    return {
+                      'border': 'none',
+                      'border-top': '1px solid $border2Hex',
+                    };
                   case 'th':
                     return {
                       'color': textHex,
@@ -478,10 +492,7 @@ class _ViewerScreenState extends State<ViewerScreen> {
       backgroundColor: Colors.transparent,
       isScrollControlled: true,
       builder: (sheetContext) {
-        return _ReaderSettingsSheet(
-          prefs: _prefs,
-          onChanged: _updatePrefs,
-        );
+        return _ReaderSettingsSheet(prefs: _prefs, onChanged: _updatePrefs);
       },
     );
   }

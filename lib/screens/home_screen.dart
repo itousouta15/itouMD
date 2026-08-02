@@ -155,7 +155,11 @@ class _HomeScreenState extends State<HomeScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              _Header(c: c, isDark: isDark, onToggleTheme: widget.onToggleTheme),
+              _Header(
+                c: c,
+                isDark: isDark,
+                onToggleTheme: widget.onToggleTheme,
+              ),
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 20),
                 child: Column(
@@ -246,10 +250,8 @@ class _HomeScreenState extends State<HomeScreen> {
                           ),
                           const SizedBox(height: 12),
                           ElevatedButton.icon(
-                            onPressed: () => _openViewer(
-                              '貼上的內容',
-                              _pasteController.text,
-                            ),
+                            onPressed: () =>
+                                _openViewer('貼上的內容', _pasteController.text),
                             icon: const Icon(
                               Icons.auto_stories_outlined,
                               size: 18,
@@ -392,7 +394,10 @@ class _StepCard extends StatelessWidget {
     final c = ItouColorsExt.of(context);
     final mono = Theme.of(context).textTheme.labelSmall!;
     return Container(
-      decoration: BoxDecoration(color: c.panel, border: Border.all(color: c.border)),
+      decoration: BoxDecoration(
+        color: c.panel,
+        border: Border.all(color: c.border),
+      ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
@@ -460,7 +465,10 @@ class _RecentDocsPanel extends StatelessWidget {
   Widget build(BuildContext context) {
     final c = ItouColorsExt.of(context);
     return Container(
-      decoration: BoxDecoration(color: c.panel, border: Border.all(color: c.border)),
+      decoration: BoxDecoration(
+        color: c.panel,
+        border: Border.all(color: c.border),
+      ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
@@ -469,7 +477,10 @@ class _RecentDocsPanel extends StatelessWidget {
             InkWell(
               onTap: () => onOpen(docs[i]),
               child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 14,
+                  vertical: 12,
+                ),
                 child: Row(
                   children: [
                     Icon(_iconFor(docs[i].source), size: 18, color: c.dim),
