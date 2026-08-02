@@ -15,7 +15,7 @@
 
 | 編輯模式 | HackMD 筆記列表 | 設定 |
 | --- | --- | --- |
-| ![編輯模式](docs/screenshots/04-editor.png) | ![HackMD 筆記列表](docs/screenshots/05-notes.png) | ![設定](docs/screenshots/06-settings.png) |
+| ![編輯模式](docs/screenshots/04-editor.png) | ![HackMD](docs/screenshots/05-notes.png) | ![設定](docs/screenshots/06-settings.png) |
 
 ## 功能亮點
 
