@@ -1,0 +1,5 @@
+blank_issues_enabled: true
+contact_links:
+  - name: 🔒 回報安全性問題
+    url: https://github.com/itousouta15/itouMD/security/advisories/new
+    about: 安全性漏洞請不要開公開 Issue，改用這個私下回報管道（詳見 SECURITY.md）。

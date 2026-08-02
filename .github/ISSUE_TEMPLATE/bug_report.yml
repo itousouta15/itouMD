@@ -1,0 +1,84 @@
+name: 🐛 Bug 回報
+description: 回報 itouMD 出現的問題或錯誤行為
+title: "[Bug] "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        謝謝你花時間回報問題！請先在 [Issues](https://github.com/itousouta15/itouMD/issues) 搜尋是否已有相同回報。
+
+        ⚠️ 如果是**安全性問題**，請不要在這裡公開回報，改參考 [`SECURITY.md`](../../SECURITY.md) 的私下回報方式。
+
+  - type: textarea
+    id: description
+    attributes:
+      label: 問題描述
+      description: 發生了什麼事？
+      placeholder: 例如：開啟含有 :::spoiler 的筆記時，內容沒有正確顯示
+    validations:
+      required: true
+
+  - type: textarea
+    id: steps
+    attributes:
+      label: 重現步驟
+      description: 要怎麼做才能重現這個問題？如果跟特定 Markdown 內容或網址有關，麻煩附上（注意不要貼上包含敏感資訊的內容）
+      placeholder: |
+        1. 開啟 App
+        2. 貼上以下 Markdown ...
+        3. 點選「從網址抓取」
+        4. 看到錯誤
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: 預期行為
+      placeholder: 應該要顯示 ...
+    validations:
+      required: true
+
+  - type: textarea
+    id: actual
+    attributes:
+      label: 實際行為
+      placeholder: 實際上顯示 ... / 發生了 crash ...
+    validations:
+      required: true
+
+  - type: input
+    id: app-version
+    attributes:
+      label: App 版本
+      description: 可在設定或 Release 頁面查到，例如 v1.0.1
+    validations:
+      required: true
+
+  - type: dropdown
+    id: platform
+    attributes:
+      label: 平台
+      options:
+        - Android
+        - iOS
+        - 兩者皆是
+    validations:
+      required: true
+
+  - type: input
+    id: device
+    attributes:
+      label: 裝置型號與作業系統版本
+      placeholder: 例如：Pixel 9 / Android 15
+    validations:
+      required: false
+
+  - type: textarea
+    id: extra
+    attributes:
+      label: 其他資訊
+      description: 螢幕截圖、錄影、log 等任何有幫助的資訊
+    validations:
+      required: false
