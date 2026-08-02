@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../services/hackmd_account.dart';
 import '../services/hackmd_api.dart';
 import '../services/markdown_source.dart';
+import '../services/note_cache.dart';
 import '../services/recent_docs.dart';
 import '../theme.dart';
 import '../widgets/loader_ring.dart';
@@ -25,6 +26,7 @@ class _HackmdNotesScreenState extends State<HackmdNotesScreen> {
   final List<HackmdTeam> _teams = [];
   final Map<String, List<HackmdNote>> _teamNotes = {};
   bool _loading = true;
+  bool _offline = false;
   String? _error;
   String? _openingNoteId;
 
@@ -38,6 +40,7 @@ class _HackmdNotesScreenState extends State<HackmdNotesScreen> {
     setState(() {
       _loading = true;
       _error = null;
+      _offline = false;
     });
     final token = await HackmdAccount.getToken();
     if (!mounted) return;
@@ -72,19 +75,57 @@ class _HackmdNotesScreenState extends State<HackmdNotesScreen> {
           ..addAll(teamNotes);
         _loading = false;
       });
+      // Keep a snapshot so the list stays usable offline.
+      NoteCache.saveList(
+        NoteListSnapshot(
+          personal: personal,
+          teams: teams,
+          teamNotes: teamNotes,
+          savedAt: DateTime.now(),
+        ),
+      );
     } on HackmdApiException catch (e) {
       if (!mounted) return;
-      setState(() {
-        _loading = false;
-        _error = e.message;
-      });
+      final loadedOffline = await _tryOfflineList();
+      if (!mounted) return;
+      if (!loadedOffline) {
+        setState(() {
+          _loading = false;
+          _error = e.message;
+        });
+      }
     } catch (_) {
       if (!mounted) return;
-      setState(() {
-        _loading = false;
-        _error = '讀取筆記失敗，再試一次看看 (´;ω;`)';
-      });
+      final loadedOffline = await _tryOfflineList();
+      if (!mounted) return;
+      if (!loadedOffline) {
+        setState(() {
+          _loading = false;
+          _error = '讀取筆記失敗，再試一次看看 (´;ω;`)';
+        });
+      }
     }
+  }
+
+  /// Falls back to the cached list snapshot when the fetch fails. Returns
+  /// `true` when the cached data was loaded (and `false` when there is
+  /// nothing cached, leaving the caller to surface the error).
+  Future<bool> _tryOfflineList() async {
+    final snapshot = await NoteCache.loadList();
+    if (!mounted) return true;
+    if (snapshot == null) return false;
+    setState(() {
+      _personal = snapshot.personal;
+      _teams
+        ..clear()
+        ..addAll(snapshot.teams);
+      _teamNotes
+        ..clear()
+        ..addAll(snapshot.teamNotes);
+      _loading = false;
+      _offline = true;
+    });
+    return true;
   }
 
   String _noteTitle(HackmdNote note, String content) {
@@ -176,6 +217,7 @@ class _HackmdNotesScreenState extends State<HackmdNotesScreen> {
       sections.add(
         _Section(
           title: '個人筆記',
+          icon: Icons.person_outline,
           children: _personal
               .map(
                 (n) => _NoteTile(
@@ -196,6 +238,7 @@ class _HackmdNotesScreenState extends State<HackmdNotesScreen> {
       sections.add(
         _Section(
           title: '@${team.urlSlug}',
+          icon: Icons.groups_outlined,
           children: notes
               .map(
                 (n) => _NoteTile(
@@ -218,6 +261,31 @@ class _HackmdNotesScreenState extends State<HackmdNotesScreen> {
         physics: const AlwaysScrollableScrollPhysics(),
         padding: const EdgeInsets.fromLTRB(16, 12, 16, 32),
         children: [
+          if (_offline)
+            Container(
+              margin: const EdgeInsets.only(bottom: 12),
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+              decoration: BoxDecoration(
+                color: c.panel,
+                border: Border.all(color: const Color(0xFFAD8B5C)),
+              ),
+              child: const Row(
+                children: [
+                  Icon(
+                    Icons.cloud_off_outlined,
+                    size: 16,
+                    color: Color(0xFFAD8B5C),
+                  ),
+                  SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      '離線資料（上次成功更新的內容）',
+                      style: TextStyle(color: Color(0xFFAD8B5C), fontSize: 12),
+                    ),
+                  ),
+                ],
+              ),
+            ),
           for (final section in sections) ...[
             section,
             const SizedBox(height: 20),
@@ -228,11 +296,25 @@ class _HackmdNotesScreenState extends State<HackmdNotesScreen> {
   }
 }
 
-class _Section extends StatelessWidget {
+class _Section extends StatefulWidget {
   final String title;
+  final IconData icon;
   final List<Widget> children;
 
-  const _Section({required this.title, required this.children});
+  const _Section({
+    required this.title,
+    required this.icon,
+    required this.children,
+  });
+
+  @override
+  State<_Section> createState() => _SectionState();
+}
+
+class _SectionState extends State<_Section> {
+  // Collapsed by default — long lists stay compact; tap a section header to
+  // expand just the one you need.
+  bool _expanded = false;
 
   @override
   Widget build(BuildContext context) {
@@ -240,22 +322,85 @@ class _Section extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        SectionLabel(title),
-        const SizedBox(height: 8),
-        Container(
-          decoration: BoxDecoration(
-            color: c.panel,
-            border: Border.all(color: c.border),
+        Material(
+          color: Colors.transparent,
+          child: InkWell(
+            onTap: () => setState(() => _expanded = !_expanded),
+            child: AnimatedContainer(
+              duration: const Duration(milliseconds: 200),
+              curve: Curves.easeOutCubic,
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+              decoration: BoxDecoration(
+                color: c.panel,
+                border: Border.all(
+                  color: _expanded ? c.blue.withValues(alpha: 0.45) : c.border,
+                ),
+              ),
+              child: Row(
+                children: [
+                  Icon(widget.icon, size: 17, color: c.blue),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Text(
+                      widget.title,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        color: c.text,
+                        fontSize: 14,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ),
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 7,
+                      vertical: 2,
+                    ),
+                    decoration: BoxDecoration(
+                      color: c.inset,
+                      border: Border.all(color: c.border),
+                      borderRadius: BorderRadius.circular(4),
+                    ),
+                    child: Text(
+                      '${widget.children.length}',
+                      style: TextStyle(color: c.dim, fontSize: 11.5),
+                    ),
+                  ),
+                  const SizedBox(width: 6),
+                  AnimatedRotation(
+                    turns: _expanded ? 0.5 : 0,
+                    duration: const Duration(milliseconds: 200),
+                    child: Icon(Icons.expand_more, size: 22, color: c.dim),
+                  ),
+                ],
+              ),
+            ),
           ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              for (var i = 0; i < children.length; i++) ...[
-                if (i > 0) Divider(height: 1, thickness: 1, color: c.border),
-                children[i],
-              ],
-            ],
-          ),
+        ),
+        AnimatedSize(
+          duration: const Duration(milliseconds: 240),
+          curve: Curves.easeOutCubic,
+          alignment: Alignment.topCenter,
+          child: _expanded
+              ? Container(
+                  margin: const EdgeInsets.only(top: 6),
+                  decoration: BoxDecoration(
+                    color: c.panel,
+                    border: Border.all(color: c.border),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      for (var i = 0; i < widget.children.length; i++) ...[
+                        if (i > 0)
+                          Divider(height: 1, thickness: 1, color: c.border),
+                        widget.children[i],
+                      ],
+                    ],
+                  ),
+                )
+              : const SizedBox(width: double.infinity),
         ),
       ],
     );
@@ -286,7 +431,16 @@ class _NoteTile extends StatelessWidget {
         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
         child: Row(
           children: [
-            Icon(Icons.description_outlined, size: 18, color: c.dim),
+            Container(
+              width: 30,
+              height: 30,
+              decoration: BoxDecoration(
+                color: c.inset,
+                border: Border.all(color: c.border),
+                borderRadius: BorderRadius.circular(6),
+              ),
+              child: Icon(Icons.description_outlined, size: 16, color: c.blue),
+            ),
             const SizedBox(width: 12),
             Expanded(
               child: Column(
@@ -299,7 +453,7 @@ class _NoteTile extends StatelessWidget {
                     style: TextStyle(
                       color: c.text,
                       fontSize: 13.5,
-                      fontWeight: FontWeight.w500,
+                      fontWeight: FontWeight.w600,
                     ),
                   ),
                   const SizedBox(height: 3),
@@ -307,7 +461,7 @@ class _NoteTile extends StatelessWidget {
                     subtitle,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
-                    style: TextStyle(color: c.mute, fontSize: 11),
+                    style: TextStyle(color: c.dim, fontSize: 11.5),
                   ),
                 ],
               ),
