@@ -366,9 +366,9 @@ class _ViewerScreenState extends State<ViewerScreen> {
           _editController.text = note.content;
         });
         _render(note.content);
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('已更新為最新內容 (｡•ᴗ•｡)')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('已更新為最新內容 (｡•ᴗ•｡)')));
       }
     } on HackmdApiException {
       // Offline, token invalid, or not this account's note — keep cached.
@@ -710,7 +710,11 @@ class _ViewerScreenState extends State<ViewerScreen> {
     final isDark = brightness == Brightness.dark;
     final family = _prefs.fontFamily.textStyle();
     final mono = ReaderFontFamily.mono.textStyle();
-    final textColor = _prefs.textColor.resolve(c, brightness, _prefs.customColor);
+    final textColor = _prefs.textColor.resolve(
+      c,
+      brightness,
+      _prefs.customColor,
+    );
     final base = _prefs.fontSize;
 
     final textHex = _hex(textColor);
@@ -1248,7 +1252,11 @@ class _ReaderSettingsSheetState extends State<_ReaderSettingsSheet> {
                           ),
                         ),
                         child: tc == ReaderTextColor.custom
-                            ? const Icon(Icons.add, size: 14, color: Colors.white)
+                            ? const Icon(
+                                Icons.add,
+                                size: 14,
+                                color: Colors.white,
+                              )
                             : null,
                       ),
                       const SizedBox(width: 4),
@@ -1257,7 +1265,9 @@ class _ReaderSettingsSheetState extends State<_ReaderSettingsSheet> {
                         style: TextStyle(
                           color: selected ? c.text : c.dim,
                           fontSize: 12,
-                          fontWeight: selected ? FontWeight.w600 : FontWeight.w400,
+                          fontWeight: selected
+                              ? FontWeight.w600
+                              : FontWeight.w400,
                         ),
                       ),
                     ],

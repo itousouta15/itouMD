@@ -177,13 +177,15 @@ class _HackmdNotesScreenState extends State<HackmdNotesScreen> {
         _Section(
           title: '個人筆記',
           children: _personal
-              .map((n) => _NoteTile(
-                note: n,
-                subtitle: n.permalink ?? n.id,
-                busy: _openingNoteId == n.id,
-                onTap: () => _openNote(n, null),
-                c: c,
-              ))
+              .map(
+                (n) => _NoteTile(
+                  note: n,
+                  subtitle: n.permalink ?? n.id,
+                  busy: _openingNoteId == n.id,
+                  onTap: () => _openNote(n, null),
+                  c: c,
+                ),
+              )
               .toList(),
         ),
       );
@@ -195,13 +197,15 @@ class _HackmdNotesScreenState extends State<HackmdNotesScreen> {
         _Section(
           title: '@${team.urlSlug}',
           children: notes
-              .map((n) => _NoteTile(
-                note: n,
-                subtitle: n.permalink ?? n.id,
-                busy: _openingNoteId == n.id,
-                onTap: () => _openNote(n, team),
-                c: c,
-              ))
+              .map(
+                (n) => _NoteTile(
+                  note: n,
+                  subtitle: n.permalink ?? n.id,
+                  busy: _openingNoteId == n.id,
+                  onTap: () => _openNote(n, team),
+                  c: c,
+                ),
+              )
               .toList(),
         ),
       );

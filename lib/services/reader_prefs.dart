@@ -39,7 +39,17 @@ extension ReaderFontFamilyX on ReaderFontFamily {
   };
 }
 
-enum ReaderTextColor { theme, sepia, blue, contrast, green, purple, orange, pink, custom }
+enum ReaderTextColor {
+  theme,
+  sepia,
+  blue,
+  contrast,
+  green,
+  purple,
+  orange,
+  pink,
+  custom,
+}
 
 extension ReaderTextColorX on ReaderTextColor {
   String get label => switch (this) {
@@ -67,7 +77,7 @@ extension ReaderTextColorX on ReaderTextColor {
         ReaderTextColor.pink => const Color(0xFFF48FB1),
         ReaderTextColor.custom =>
           customColor ??
-          (brightness == Brightness.dark ? Colors.white : Colors.black),
+              (brightness == Brightness.dark ? Colors.white : Colors.black),
       };
 }
 
