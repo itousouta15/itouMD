@@ -2,14 +2,17 @@ import 'dart:convert';
 
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
+import 'package:package_info_plus/package_info_plus.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../services/hackmd_account.dart';
 import '../services/markdown_source.dart';
 import '../services/recent_docs.dart';
 import '../services/ui_prefs.dart';
+import '../services/update_checker.dart';
 import '../theme.dart';
 import '../widgets/loader_ring.dart';
+import '../widgets/update_dialog.dart';
 import 'hackmd_account_screen.dart';
 import 'hackmd_notes_screen.dart';
 import 'settings_screen.dart';
@@ -44,11 +47,26 @@ class _HomeScreenState extends State<HomeScreen> {
   void initState() {
     super.initState();
     _loadRecents();
+    _checkUpdateSilently();
   }
 
   Future<void> _loadRecents() async {
     final docs = await RecentDocs.load();
     if (mounted) setState(() => _recents = docs);
+  }
+
+  /// Silent update check on launch: only shows anything when a newer
+  /// version actually exists; failures and "already latest" do nothing.
+  Future<void> _checkUpdateSilently() async {
+    final info = await UpdateChecker.checkForUpdate();
+    if (!mounted || info == null) return;
+    String version = '';
+    try {
+      version = (await PackageInfo.fromPlatform()).version;
+    } catch (_) {}
+    await Future<void>.delayed(const Duration(milliseconds: 900));
+    if (!mounted) return;
+    await showUpdateAvailableDialog(context, info, currentVersion: version);
   }
 
   @override
@@ -458,7 +476,7 @@ class _HeaderState extends State<_Header> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Padding(
-            padding: const EdgeInsets.only(top: 3),
+            padding: const EdgeInsets.only(top: 4),
             child: AnimatedSwitcher(
               duration: const Duration(milliseconds: 280),
               switchInCurve: Curves.easeOut,

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:package_info_plus/package_info_plus.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../services/hackmd_account.dart';
@@ -8,8 +9,10 @@ import '../services/reader_prefs.dart';
 import '../services/recent_docs.dart';
 import '../services/sync_prefs.dart';
 import '../services/ui_prefs.dart';
+import '../services/update_checker.dart';
 import '../theme.dart';
 import '../widgets/loader_ring.dart';
+import '../widgets/update_dialog.dart';
 import 'hackmd_account_screen.dart';
 import 'sync_history_screen.dart';
 
@@ -36,6 +39,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   ReaderPrefs _readerPrefs = const ReaderPrefs();
   bool _autoRefresh = true;
   ConflictResolution _conflictResolution = ConflictResolution.ask;
+  String _appVersion = '';
 
   @override
   void initState() {
@@ -48,12 +52,31 @@ class _SettingsScreenState extends State<SettingsScreen> {
     final reader = await ReaderPrefs.load();
     final autoRefresh = await SyncPrefs.autoRefreshOnOpen;
     final conflict = await SyncPrefs.conflictResolution;
+    String version = '';
+    try {
+      version = (await PackageInfo.fromPlatform()).version;
+    } catch (_) {
+      // Package info unavailable on exotic platforms — fall back to blank.
+    }
     if (!mounted) return;
     setState(() {
       _readerPrefs = reader;
       _autoRefresh = autoRefresh;
       _conflictResolution = conflict;
+      _appVersion = version;
     });
+  }
+
+  Future<void> _checkForUpdate(BuildContext context) async {
+    final info = await UpdateChecker.checkForUpdate();
+    if (!context.mounted) return;
+    if (info == null) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('已是最新版本 (｡•ᴗ•｡)')));
+      return;
+    }
+    await showUpdateAvailableDialog(context, info, currentVersion: _appVersion);
   }
 
   Future<void> _loadAccount() async {
@@ -395,8 +418,35 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
+                    InkWell(
+                      onTap: () => _checkForUpdate(context),
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 2),
+                        child: Row(
+                          children: [
+                            Icon(
+                              Icons.system_update_outlined,
+                              size: 16,
+                              color: c.blue,
+                            ),
+                            const SizedBox(width: 8),
+                            Text(
+                              '檢查更新',
+                              style: TextStyle(
+                                color: c.text,
+                                fontSize: 13.5,
+                                fontWeight: FontWeight.w500,
+                              ),
+                            ),
+                            const Spacer(),
+                            Icon(Icons.chevron_right, size: 18, color: c.mute),
+                          ],
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 10),
                     Text(
-                      'itouMD 1.1.0',
+                      'itouMD $_appVersion',
                       style: TextStyle(
                         color: c.text,
                         fontSize: 14,
