@@ -3,21 +3,28 @@ import 'package:url_launcher/url_launcher.dart';
 
 import '../services/hackmd_account.dart';
 import '../services/hackmd_api.dart';
+import '../services/note_cache.dart';
 import '../services/reader_prefs.dart';
 import '../services/recent_docs.dart';
 import '../services/sync_prefs.dart';
+import '../services/ui_prefs.dart';
 import '../theme.dart';
 import '../widgets/loader_ring.dart';
 import 'hackmd_account_screen.dart';
+import 'sync_history_screen.dart';
 
 class SettingsScreen extends StatefulWidget {
   final ThemeMode themeMode;
   final VoidCallback onToggleTheme;
+  final UiScale uiScale;
+  final ValueChanged<UiScale> onUiScaleChanged;
 
   const SettingsScreen({
     super.key,
     required this.themeMode,
     required this.onToggleTheme,
+    required this.uiScale,
+    required this.onUiScaleChanged,
   });
 
   @override
@@ -187,6 +194,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
     ).showSnackBar(const SnackBar(content: Text('已清除最近開啟紀錄 (｡•ᴗ•｡)')));
   }
 
+  Future<void> _clearNoteCache() async {
+    await NoteCache.clear();
+    if (!mounted) return;
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(const SnackBar(content: Text('已清除離線快取 (｡•ᴗ•｡)')));
+  }
+
   @override
   Widget build(BuildContext context) {
     final c = ItouColorsExt.of(context);
@@ -212,6 +227,33 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   activeThumbColor: c.blue,
                 ),
                 onTap: widget.onToggleTheme,
+              ),
+              Divider(height: 1, thickness: 1, color: c.border),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(14, 12, 14, 14),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text('介面字級', style: TextStyle(color: c.text, fontSize: 14)),
+                    const SizedBox(height: 4),
+                    Text(
+                      '調整 App 介面文字大小；閱讀內容的字級在「閱讀偏好」設定。',
+                      style: TextStyle(color: c.dim, fontSize: 12),
+                    ),
+                    const SizedBox(height: 12),
+                    Wrap(
+                      spacing: 8,
+                      runSpacing: 8,
+                      children: UiScale.values.map((s) {
+                        return _ChoiceTile(
+                          label: s.label,
+                          selected: widget.uiScale == s,
+                          onTap: () => widget.onUiScaleChanged(s),
+                        );
+                      }).toList(),
+                    ),
+                  ],
+                ),
               ),
             ],
           ),
@@ -289,6 +331,15 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   ],
                 ),
               ),
+              Divider(height: 1, thickness: 1, color: c.border),
+              _SettingRow(
+                icon: Icons.history,
+                label: '同步紀錄',
+                trailing: Icon(Icons.chevron_right, size: 18, color: c.mute),
+                onTap: () => Navigator.of(context).push(
+                  MaterialPageRoute(builder: (_) => const SyncHistoryScreen()),
+                ),
+              ),
             ],
           ),
           const SizedBox(height: 24),
@@ -320,6 +371,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 labelColor: const Color(0xFFE0777A),
                 trailing: const SizedBox.shrink(),
                 onTap: _clearRecents,
+              ),
+              Divider(height: 1, thickness: 1, color: c.border),
+              _SettingRow(
+                icon: Icons.delete_sweep_outlined,
+                label: '清除離線快取',
+                labelColor: const Color(0xFFE0777A),
+                trailing: const SizedBox.shrink(),
+                onTap: _clearNoteCache,
               ),
             ],
           ),
@@ -356,7 +415,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                           const SizedBox(width: 8),
                           Text(
                             'GitHub',
-                            style: TextStyle(color: c.blue, fontSize: 12),
+                            style: TextStyle(color: c.blue, fontSize: 14),
                           ),
                         ],
                       ),
@@ -364,12 +423,35 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     const SizedBox(height: 6),
                     Text(
                       'Made with ♥ by itouSouta',
-                      style: TextStyle(color: c.dim, fontSize: 12),
+                      style: TextStyle(color: c.dim, fontSize: 14),
                     ),
                     const SizedBox(height: 6),
                     Text(
                       'Licensed under MIT',
-                      style: TextStyle(color: c.mute, fontSize: 11),
+                      style: TextStyle(color: c.mute, fontSize: 13),
+                    ),
+                    const SizedBox(height: 12),
+                    Divider(height: 1, thickness: 1, color: c.border),
+                    const SizedBox(height: 12),
+                    Text(
+                      '感謝',
+                      style: TextStyle(
+                        color: c.text,
+                        fontSize: 13,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    const SizedBox(height: 10),
+                    _ThanksRow(
+                      logo: 'assets/logo/emfont_logo.jpg',
+                      text: '感謝 emfont 提供開源字型資源',
+                      c: c,
+                    ),
+                    const SizedBox(height: 10),
+                    _ThanksRow(
+                      logo: 'assets/logo/hackmd_logo.png',
+                      text: '感謝 HackMD 的容器語法與協作設計',
+                      c: c,
                     ),
                   ],
                 ),
@@ -740,6 +822,44 @@ class _HsvSlider extends StatelessWidget {
           ],
         ),
         const SizedBox(height: 10),
+      ],
+    );
+  }
+}
+
+class _ThanksRow extends StatelessWidget {
+  final String logo;
+  final String text;
+  final ItouColors c;
+
+  const _ThanksRow({required this.logo, required this.text, required this.c});
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.center,
+      children: [
+        Container(
+          width: 32,
+          height: 32,
+          padding: const EdgeInsets.all(3),
+          decoration: BoxDecoration(
+            color: c.inset,
+            border: Border.all(color: c.border),
+            borderRadius: BorderRadius.circular(8),
+          ),
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(5),
+            child: Image.asset(logo, fit: BoxFit.contain),
+          ),
+        ),
+        const SizedBox(width: 10),
+        Expanded(
+          child: Text(
+            text,
+            style: TextStyle(color: c.dim, fontSize: 12.5, height: 1.4),
+          ),
+        ),
       ],
     );
   }

@@ -7,6 +7,7 @@ import 'package:url_launcher/url_launcher.dart';
 import '../services/hackmd_account.dart';
 import '../services/markdown_source.dart';
 import '../services/recent_docs.dart';
+import '../services/ui_prefs.dart';
 import '../theme.dart';
 import '../widgets/loader_ring.dart';
 import 'hackmd_account_screen.dart';
@@ -17,11 +18,15 @@ import 'viewer_screen.dart';
 class HomeScreen extends StatefulWidget {
   final ThemeMode themeMode;
   final VoidCallback onToggleTheme;
+  final UiScale uiScale;
+  final ValueChanged<UiScale> onUiScaleChanged;
 
   const HomeScreen({
     super.key,
     required this.themeMode,
     required this.onToggleTheme,
+    required this.uiScale,
+    required this.onUiScaleChanged,
   });
 
   @override
@@ -197,6 +202,8 @@ class _HomeScreenState extends State<HomeScreen> {
                     builder: (_) => SettingsScreen(
                       themeMode: widget.themeMode,
                       onToggleTheme: widget.onToggleTheme,
+                      uiScale: widget.uiScale,
+                      onUiScaleChanged: widget.onUiScaleChanged,
                     ),
                   ),
                 ),
@@ -372,14 +379,14 @@ class _HomeScreenState extends State<HomeScreen> {
                                     text: 'Made with ♥ by ',
                                     style: TextStyle(
                                       color: c.mute,
-                                      fontSize: 11,
+                                      fontSize: 14,
                                     ),
                                   ),
                                   TextSpan(
                                     text: 'itouSouta',
                                     style: TextStyle(
                                       color: c.blue,
-                                      fontSize: 11,
+                                      fontSize: 14,
                                     ),
                                   ),
                                 ],
@@ -393,7 +400,7 @@ class _HomeScreenState extends State<HomeScreen> {
                             ),
                             child: Text(
                               '如果喜歡的話歡迎到 GitHub 給個 star ♡',
-                              style: TextStyle(color: c.mute, fontSize: 11),
+                              style: TextStyle(color: c.mute, fontSize: 14),
                             ),
                           ),
                         ],
@@ -485,7 +492,7 @@ class _HeaderState extends State<_Header> {
                   ),
                 ),
                 Text(
-                  '手機也能好好用 Markdown (｡•ᴗ•｡)',
+                  '手機也能好好用 MD (｡•ᴗ•｡)',
                   maxLines: 2,
                   overflow: TextOverflow.ellipsis,
                   style: TextStyle(color: c.dim, fontSize: 13, height: 1.4),
