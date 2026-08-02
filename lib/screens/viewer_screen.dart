@@ -21,11 +21,14 @@ import '../services/hackmd_account.dart';
 import '../services/hackmd_api.dart';
 import '../services/markdown_editor_actions.dart';
 import '../services/markdown_renderer.dart';
+import '../services/note_cache.dart';
 import '../services/reader_prefs.dart';
 import '../services/recent_docs.dart';
+import '../services/sync_history.dart';
 import '../services/sync_prefs.dart';
 import '../theme.dart';
 import '../widgets/loader_ring.dart';
+import 'conflict_screen.dart';
 import 'hackmd_account_screen.dart';
 
 /// Turns "press Enter on a list item" into "continue the list" instead of a
@@ -74,17 +77,25 @@ void _ensureHighlightLanguagesRegistered() {
 /// misses them. This sniffs the actual response bytes for network images
 /// and routes to [SvgPicture] or a raster [Image] accordingly.
 class _SvgAwareWidgetFactory extends WidgetFactory with SvgFactory {
+  final ValueChanged<String>? onImageTap;
+
+  _SvgAwareWidgetFactory({this.onImageTap});
+
   @override
   Widget? buildImageWidget(BuildTree tree, ImageSource src) {
     final url = src.url;
+    Widget? base;
     if (url.startsWith('http://') || url.startsWith('https://')) {
-      return _SniffedNetworkImage(
+      base = _SniffedNetworkImage(
         url: url,
         width: src.width,
         height: src.height,
       );
+    } else {
+      base = super.buildImageWidget(tree, src);
     }
-    return super.buildImageWidget(tree, src);
+    if (base == null || onImageTap == null) return base;
+    return GestureDetector(onTap: () => onImageTap!(url), child: base);
   }
 
   /// `[TOC]`-generated links point at `#slug` anchors; the `markdown`
@@ -360,6 +371,7 @@ class _ViewerScreenState extends State<ViewerScreen> {
             )
           : await HackmdApi.getNote(token, resolved.noteId);
       if (!mounted || _editing) return;
+      NoteCache.saveNote(widget.sourceRef!, widget.title, note.content);
       if (note.content != _content) {
         setState(() {
           _content = note.content;
@@ -371,36 +383,28 @@ class _ViewerScreenState extends State<ViewerScreen> {
         ).showSnackBar(const SnackBar(content: Text('已更新為最新內容 (｡•ᴗ•｡)')));
       }
     } on HackmdApiException {
-      // Offline, token invalid, or not this account's note — keep cached.
+      await _tryOfflineNote();
     } catch (_) {
-      // Same: any failure falls back to the cached copy.
+      await _tryOfflineNote();
     }
   }
 
-  /// Asks before overwriting a remote note that changed since this doc was
-  /// opened. Returns `true` when the user explicitly accepts the overwrite.
-  Future<bool> _confirmOverwrite(BuildContext context) async {
-    final proceed = await showDialog<bool>(
-      context: context,
-      builder: (dialogContext) => AlertDialog(
-        title: const Text('這篇筆記在別處被改過了'),
-        content: const Text(
-          '雲端上的版本跟你開啟時看到的不一樣。現在把內容蓋過去，'
-          '可能弄丟別人（或你其他裝置／網頁版）的新變更。',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(dialogContext).pop(false),
-            child: const Text('取消'),
-          ),
-          TextButton(
-            onPressed: () => Navigator.of(dialogContext).pop(true),
-            child: const Text('還是要蓋過去'),
-          ),
-        ],
-      ),
-    );
-    return proceed ?? false;
+  /// Falls back to the offline cache when the cloud fetch fails, so an
+  /// offline reopen still shows the last known content. Display only — the
+  /// baseline (and therefore the sync conflict check) is untouched.
+  Future<void> _tryOfflineNote() async {
+    if (!mounted || _editing) return;
+    final cached = await NoteCache.loadNote(widget.sourceRef!);
+    if (!mounted || cached == null) return;
+    if (cached.content == _content) return;
+    setState(() {
+      _content = cached.content;
+      _editController.text = cached.content;
+    });
+    _render(cached.content);
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(const SnackBar(content: Text('離線版本（無法連到 HackMD）(´;ω;`)')));
   }
 
   /// Applies a pure [EditResult] to the controller and hands focus straight
@@ -561,7 +565,10 @@ class _ViewerScreenState extends State<ViewerScreen> {
 
       // The remote moved on since we opened this doc (edited on the web, on
       // another device, by a teammate...). Overwriting blindly would destroy
-      // those newer changes, so confirm first unless the user set a default.
+      // those newer changes, so show the diff-and-merge screen unless the
+      // user configured a default.
+      var text = _editing ? _editController.text : _content;
+      var merged = false;
       if (remote.content != _baselineContent) {
         final resolution = await SyncPrefs.conflictResolution;
         if (!context.mounted) return;
@@ -569,15 +576,24 @@ class _ViewerScreenState extends State<ViewerScreen> {
           case ConflictResolution.cancel:
             return;
           case ConflictResolution.ask:
-            final proceed = await _confirmOverwrite(context);
+            final outcome = await Navigator.of(context).push<MergeOutcome>(
+              MaterialPageRoute(
+                builder: (_) => ConflictScreen(
+                  base: _baselineContent,
+                  local: text,
+                  remote: remote.content,
+                ),
+              ),
+            );
             if (!context.mounted) return;
-            if (!proceed) return;
+            if (outcome == null) return;
+            text = outcome.text;
+            merged = outcome.action == MergeAction.merged;
           case ConflictResolution.overwrite:
             break;
         }
       }
 
-      final text = _editing ? _editController.text : _content;
       if (resolved.teamPath != null) {
         await HackmdApi.updateTeamNoteContent(
           token,
@@ -589,10 +605,39 @@ class _ViewerScreenState extends State<ViewerScreen> {
         await HackmdApi.updateNoteContent(token, resolved.noteId, text);
       }
       _baselineContent = text;
+      NoteCache.saveNote(widget.sourceRef!, widget.title, text);
+      final pushedAt = DateTime.now();
+      await SyncHistory.saveUndo(
+        UndoSlot(
+          noteId: resolved.noteId,
+          teamPath: resolved.teamPath,
+          title: widget.title,
+          priorContent: remote.content,
+          pushedAt: pushedAt,
+        ),
+      );
+      await SyncHistory.add(
+        SyncEntry(
+          noteId: resolved.noteId,
+          teamPath: resolved.teamPath,
+          title: widget.title,
+          action: merged ? SyncAction.merged : SyncAction.overwrite,
+          pushedAt: pushedAt,
+        ),
+      );
       if (!context.mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('已同步到 HackMD (｡•ᴗ•｡)')));
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            merged ? '已合併並同步到 HackMD (｡•ᴗ•｡)' : '已同步到 HackMD (｡•ᴗ•｡)',
+          ),
+          duration: const Duration(seconds: 10),
+          action: SnackBarAction(
+            label: '復原',
+            onPressed: () => _undoSync(context),
+          ),
+        ),
+      );
     } on HackmdApiException catch (e) {
       if (!context.mounted) return;
       ScaffoldMessenger.of(
@@ -605,6 +650,62 @@ class _ViewerScreenState extends State<ViewerScreen> {
       ).showSnackBar(const SnackBar(content: Text('同步失敗，再試一次看看 (´;ω;`)')));
     } finally {
       if (mounted) setState(() => _syncingToHackmd = false);
+    }
+  }
+
+  /// Restores the cloud note to the content it had before the last sync
+  /// push (the "復原" action on the sync success snackbar). Saves the undo
+  /// slot before pushing so this works even after the app was restarted.
+  Future<void> _undoSync(BuildContext context) async {
+    final token = await HackmdAccount.getToken();
+    if (!context.mounted) return;
+    if (token == null || token.isEmpty) return;
+    final slot = await SyncHistory.loadUndo();
+    if (!context.mounted) return;
+    if (slot == null) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('沒有可復原的同步 (´;ω;`)')));
+      return;
+    }
+    try {
+      if (slot.teamPath != null) {
+        await HackmdApi.updateTeamNoteContent(
+          token,
+          slot.teamPath!,
+          slot.noteId,
+          slot.priorContent,
+        );
+      } else {
+        await HackmdApi.updateNoteContent(
+          token,
+          slot.noteId,
+          slot.priorContent,
+        );
+      }
+      await SyncHistory.clearUndo();
+      if (!mounted) return;
+      setState(() {
+        _content = slot.priorContent;
+        _baselineContent = slot.priorContent;
+        _editController.text = slot.priorContent;
+      });
+      _render(slot.priorContent);
+      NoteCache.saveNote(widget.sourceRef!, slot.title, slot.priorContent);
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('已復原同步 (｡•ᴗ•｡)')));
+    } on HackmdApiException catch (e) {
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(e.message)));
+    } catch (_) {
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('復原失敗，再試一次看看 (´;ω;`)')));
     }
   }
 
@@ -647,7 +748,7 @@ class _ViewerScreenState extends State<ViewerScreen> {
   /// registered language synchronously on the UI thread, which is both
   /// slow for no real benefit and prone to mis-guessing plain output/trees
   /// as some obscure language.
-  static Widget? _buildHighlightedCode({
+  Widget? _buildHighlightedCode({
     required dom.Element element,
     required bool isDark,
     required TextStyle mono,
@@ -672,6 +773,9 @@ class _ViewerScreenState extends State<ViewerScreen> {
         backgroundColor: Colors.transparent,
       );
 
+    final codeText = codeEl.text;
+    final lineCount = '\n'.allMatches(codeText).length + 1;
+
     return Container(
       width: double.infinity,
       margin: const EdgeInsets.symmetric(vertical: 8),
@@ -679,16 +783,74 @@ class _ViewerScreenState extends State<ViewerScreen> {
         color: c.inset,
         border: Border.all(color: c.border),
       ),
-      child: SingleChildScrollView(
-        scrollDirection: Axis.horizontal,
-        padding: const EdgeInsets.all(12),
-        child: HighlightView(
-          codeEl.text,
-          language: lang,
-          theme: theme,
-          textStyle: mono.copyWith(fontSize: base - 2, height: 1.5),
-          padding: EdgeInsets.zero,
-        ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            children: [
+              Padding(
+                padding: const EdgeInsets.only(left: 12),
+                child: Text(
+                  lang,
+                  style: TextStyle(
+                    color: c.mute,
+                    fontSize: 11,
+                    fontFamily: 'monospace',
+                  ),
+                ),
+              ),
+              const Spacer(),
+              IconButton(
+                tooltip: '複製程式碼',
+                icon: Icon(Icons.copy_all_outlined, size: 16, color: c.dim),
+                visualDensity: VisualDensity.compact,
+                constraints: const BoxConstraints(minWidth: 36, minHeight: 36),
+                onPressed: () {
+                  Clipboard.setData(ClipboardData(text: codeText));
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('程式碼已複製 (｡•ᴗ•｡)')),
+                  );
+                },
+              ),
+            ],
+          ),
+          Divider(height: 1, thickness: 1, color: c.border),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Container(
+                width: 36,
+                padding: const EdgeInsets.symmetric(vertical: 12),
+                decoration: BoxDecoration(
+                  color: c.inset,
+                  border: Border(right: BorderSide(color: c.border)),
+                ),
+                child: Text(
+                  List.generate(lineCount, (i) => '${i + 1}').join('\n'),
+                  textAlign: TextAlign.center,
+                  style: mono.copyWith(
+                    fontSize: base - 2,
+                    height: 1.5,
+                    color: c.mute,
+                  ),
+                ),
+              ),
+              Expanded(
+                child: SingleChildScrollView(
+                  scrollDirection: Axis.horizontal,
+                  padding: const EdgeInsets.all(12),
+                  child: HighlightView(
+                    codeText,
+                    language: lang,
+                    theme: theme,
+                    textStyle: mono.copyWith(fontSize: base - 2, height: 1.5),
+                    padding: EdgeInsets.zero,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ],
       ),
     );
   }
@@ -770,273 +932,301 @@ class _ViewerScreenState extends State<ViewerScreen> {
           ],
         ],
       ),
-      body: _editing
-          ? Column(
-              children: [
-                Expanded(
-                  child: Container(
-                    color: c.bg,
-                    padding: const EdgeInsets.all(16),
-                    child: TextField(
-                      controller: _editController,
-                      focusNode: _editFocusNode,
-                      autofocus: true,
-                      maxLines: null,
-                      expands: true,
-                      textAlignVertical: TextAlignVertical.top,
-                      keyboardType: TextInputType.multiline,
-                      inputFormatters: [_MarkdownListContinuationFormatter()],
-                      style: mono.copyWith(
-                        color: c.text,
-                        fontSize: base - 1,
-                        height: 1.5,
-                      ),
-                      decoration: const InputDecoration(
-                        border: InputBorder.none,
+      // The reader content and editor keep their own explicit font sizes —
+      // the app-level UI text scale must not touch them.
+      body: MediaQuery(
+        data: MediaQuery.of(context).copyWith(textScaler: TextScaler.noScaling),
+        child: _editing
+            ? Column(
+                children: [
+                  Expanded(
+                    child: Container(
+                      color: c.bg,
+                      padding: const EdgeInsets.all(16),
+                      child: TextField(
+                        controller: _editController,
+                        focusNode: _editFocusNode,
+                        autofocus: true,
+                        maxLines: null,
+                        expands: true,
+                        textAlignVertical: TextAlignVertical.top,
+                        keyboardType: TextInputType.multiline,
+                        inputFormatters: [_MarkdownListContinuationFormatter()],
+                        style: mono.copyWith(
+                          color: c.text,
+                          fontSize: base - 1,
+                          height: 1.5,
+                        ),
+                        decoration: const InputDecoration(
+                          border: InputBorder.none,
+                        ),
                       ),
                     ),
                   ),
-                ),
-                _EditorToolbar(
-                  c: c,
-                  onHeading: _toolbarHeading,
-                  onBold: () => _toolbarWrap('**'),
-                  onItalic: () => _toolbarWrap('_'),
-                  onStrikethrough: () => _toolbarWrap('~~'),
-                  onInlineCode: () => _toolbarWrap('`'),
-                  onCodeBlock: _toolbarCodeBlock,
-                  onQuote: () => _toolbarLinePrefix('> '),
-                  onBulletList: () => _toolbarLinePrefix('- '),
-                  onNumberedList: () => _toolbarLinePrefix('1. '),
-                  onTaskList: () => _toolbarLinePrefix('- [ ] '),
-                  onLink: _toolbarLink,
-                ),
-              ],
-            )
-          : Container(
-              color: c.bg,
-              child: SelectionArea(
-                child: SingleChildScrollView(
-                  padding: const EdgeInsets.fromLTRB(20, 12, 20, 40),
-                  child: HtmlWidget(
-                    html,
-                    factoryBuilder: () => _SvgAwareWidgetFactory(),
-                    textStyle: family.copyWith(
-                      color: textColor,
-                      fontSize: base,
-                      height: 1.65,
-                    ),
-                    onTapUrl: (url) async {
-                      final uri = Uri.tryParse(url);
-                      if (uri != null) await launchUrl(uri);
-                      return true;
-                    },
-                    customWidgetBuilder: (element) {
-                      if (element.localName == 'pre') {
-                        return _buildHighlightedCode(
-                          element: element,
-                          isDark: isDark,
-                          mono: mono,
-                          base: base,
-                          c: c,
+                  _EditorToolbar(
+                    c: c,
+                    onHeading: _toolbarHeading,
+                    onBold: () => _toolbarWrap('**'),
+                    onItalic: () => _toolbarWrap('_'),
+                    onStrikethrough: () => _toolbarWrap('~~'),
+                    onInlineCode: () => _toolbarWrap('`'),
+                    onCodeBlock: _toolbarCodeBlock,
+                    onQuote: () => _toolbarLinePrefix('> '),
+                    onBulletList: () => _toolbarLinePrefix('- '),
+                    onNumberedList: () => _toolbarLinePrefix('1. '),
+                    onTaskList: () => _toolbarLinePrefix('- [ ] '),
+                    onLink: _toolbarLink,
+                  ),
+                ],
+              )
+            : Container(
+                color: c.bg,
+                child: SelectionArea(
+                  child: SingleChildScrollView(
+                    padding: const EdgeInsets.fromLTRB(20, 12, 20, 40),
+                    child: HtmlWidget(
+                      html,
+                      factoryBuilder: () =>
+                          _SvgAwareWidgetFactory(onImageTap: _showImagePreview),
+                      textStyle: family.copyWith(
+                        color: textColor,
+                        fontSize: base,
+                        height: 1.65,
+                      ),
+                      onTapUrl: (url) async {
+                        final uri = Uri.tryParse(url);
+                        if (uri != null) await launchUrl(uri);
+                        return true;
+                      },
+                      customWidgetBuilder: (element) {
+                        if (element.localName == 'pre') {
+                          return _buildHighlightedCode(
+                            element: element,
+                            isDark: isDark,
+                            mono: mono,
+                            base: base,
+                            c: c,
+                          );
+                        }
+                        if (element.localName != 'x-latex') return null;
+                        final encoded = element.attributes['data-tex'] ?? '';
+                        final display =
+                            element.attributes['data-mode'] == 'display';
+                        String tex;
+                        try {
+                          tex = utf8.decode(base64Decode(encoded));
+                        } catch (_) {
+                          tex = '';
+                        }
+                        final mathWidget = Math.tex(
+                          tex,
+                          mathStyle: display
+                              ? MathStyle.display
+                              : MathStyle.text,
+                          textStyle: family.copyWith(
+                            color: textColor,
+                            fontSize: base,
+                          ),
+                          onErrorFallback: (err) => Text(
+                            '⚠ LaTeX 語法錯誤',
+                            style: TextStyle(color: c.mute, fontSize: base - 2),
+                          ),
                         );
-                      }
-                      if (element.localName != 'x-latex') return null;
-                      final encoded = element.attributes['data-tex'] ?? '';
-                      final display =
-                          element.attributes['data-mode'] == 'display';
-                      String tex;
-                      try {
-                        tex = utf8.decode(base64Decode(encoded));
-                      } catch (_) {
-                        tex = '';
-                      }
-                      final mathWidget = Math.tex(
-                        tex,
-                        mathStyle: display ? MathStyle.display : MathStyle.text,
-                        textStyle: family.copyWith(
-                          color: textColor,
-                          fontSize: base,
-                        ),
-                        onErrorFallback: (err) => Text(
-                          '⚠ LaTeX 語法錯誤',
-                          style: TextStyle(color: c.mute, fontSize: base - 2),
-                        ),
-                      );
-                      if (!display) return mathWidget;
-                      return Padding(
-                        padding: const EdgeInsets.symmetric(vertical: 8),
-                        child: Center(child: mathWidget),
-                      );
-                    },
-                    customStylesBuilder: (element) {
-                      switch (element.localName) {
-                        case 'x-latex':
-                          return element.attributes['data-mode'] == 'display'
-                              ? {'display': 'block'}
-                              : null;
-                        case 'h1':
-                          return {
-                            'color': textHex,
-                            'font-family': family.fontFamily ?? '',
-                            'font-size': '${base + 10.5}px',
-                            'font-weight': '700',
-                            'border-bottom': '1px solid $border2Hex',
-                            'padding': '0 0 8px 0',
-                            'margin': '4px 0 14px 0',
-                          };
-                        case 'h2':
-                          return {
-                            'color': textHex,
-                            'font-family': family.fontFamily ?? '',
-                            'font-size': '${base + 5.5}px',
-                            'font-weight': '700',
-                            'border-bottom': '1px solid $border2Hex',
-                            'padding': '0 0 6px 0',
-                            'margin': '4px 0 12px 0',
-                          };
-                        case 'h3':
-                          return {
-                            'color': textHex,
-                            'font-family': family.fontFamily ?? '',
-                            'font-size': '${base + 2.5}px',
-                            'font-weight': '600',
-                          };
-                        case 'h4':
-                          return {'color': textHex, 'font-weight': '600'};
-                        case 'h5':
-                          return {
-                            'color': dimHex,
-                            'font-size': '${base - 1.5}px',
-                            'font-weight': '600',
-                          };
-                        case 'h6':
-                          return {
-                            'color': muteHex,
-                            'font-size': '${base - 2.5}px',
-                            'font-weight': '600',
-                          };
-                        case 'p':
-                          final cls = element.attributes['class'] ?? '';
-                          if (cls.contains('-title')) {
-                            final calloutHex = _calloutColor(
-                              cls,
-                              blueHex: blueHex,
-                              purpleHex: purpleHex,
-                              successHex: successHex,
-                              warningHex: warningHex,
-                              dangerHex: dangerHex,
-                            );
+                        if (!display) return mathWidget;
+                        return Padding(
+                          padding: const EdgeInsets.symmetric(vertical: 8),
+                          child: Center(child: mathWidget),
+                        );
+                      },
+                      customStylesBuilder: (element) {
+                        switch (element.localName) {
+                          case 'x-latex':
+                            return element.attributes['data-mode'] == 'display'
+                                ? {'display': 'block'}
+                                : null;
+                          case 'h1':
                             return {
-                              'color': calloutHex ?? textHex,
+                              'color': textHex,
+                              'font-family': family.fontFamily ?? '',
+                              'font-size': '${base + 10.5}px',
                               'font-weight': '700',
-                              'margin': '0 0 4px 0',
+                              'border-bottom': '1px solid $border2Hex',
+                              'padding': '0 0 8px 0',
+                              'margin': '4px 0 14px 0',
                             };
-                          }
-                          return {'color': textHex};
-                        case 'li':
-                          return {'color': textHex};
-                        case 'div':
-                          {
-                            final cls = element.attributes['class'] ?? '';
-                            final calloutHex = _calloutColor(
-                              cls,
-                              blueHex: blueHex,
-                              purpleHex: purpleHex,
-                              successHex: successHex,
-                              warningHex: warningHex,
-                              dangerHex: dangerHex,
-                            );
-                            if (calloutHex == null) return null;
+                          case 'h2':
                             return {
-                              'border-left': '3px solid $calloutHex',
+                              'color': textHex,
+                              'font-family': family.fontFamily ?? '',
+                              'font-size': '${base + 5.5}px',
+                              'font-weight': '700',
+                              'border-bottom': '1px solid $border2Hex',
+                              'padding': '0 0 6px 0',
+                              'margin': '4px 0 12px 0',
+                            };
+                          case 'h3':
+                            return {
+                              'color': textHex,
+                              'font-family': family.fontFamily ?? '',
+                              'font-size': '${base + 2.5}px',
+                              'font-weight': '600',
+                            };
+                          case 'h4':
+                            return {'color': textHex, 'font-weight': '600'};
+                          case 'h5':
+                            return {
+                              'color': dimHex,
+                              'font-size': '${base - 1.5}px',
+                              'font-weight': '600',
+                            };
+                          case 'h6':
+                            return {
+                              'color': muteHex,
+                              'font-size': '${base - 2.5}px',
+                              'font-weight': '600',
+                            };
+                          case 'p':
+                            final cls = element.attributes['class'] ?? '';
+                            if (cls.contains('-title')) {
+                              final calloutHex = _calloutColor(
+                                cls,
+                                blueHex: blueHex,
+                                purpleHex: purpleHex,
+                                successHex: successHex,
+                                warningHex: warningHex,
+                                dangerHex: dangerHex,
+                              );
+                              return {
+                                'color': calloutHex ?? textHex,
+                                'font-weight': '700',
+                                'margin': '0 0 4px 0',
+                              };
+                            }
+                            return {'color': textHex};
+                          case 'li':
+                            return {'color': textHex};
+                          case 'div':
+                            {
+                              final cls = element.attributes['class'] ?? '';
+                              final calloutHex = _calloutColor(
+                                cls,
+                                blueHex: blueHex,
+                                purpleHex: purpleHex,
+                                successHex: successHex,
+                                warningHex: warningHex,
+                                dangerHex: dangerHex,
+                              );
+                              if (calloutHex == null) return null;
+                              return {
+                                'border-left': '3px solid $calloutHex',
+                                'background-color': panelHex,
+                                'padding': '10px 14px',
+                                'margin': '8px 0',
+                                'color': textHex,
+                              };
+                            }
+                          case 'strong':
+                          case 'b':
+                            return {'color': textHex, 'font-weight': '700'};
+                          case 'em':
+                          case 'i':
+                            return {'color': dimHex};
+                          case 'del':
+                          case 's':
+                            return {'color': dimHex};
+                          case 'blockquote':
+                            return {
+                              'border-left': '3px solid $blueHex',
                               'background-color': panelHex,
                               'padding': '10px 14px',
                               'margin': '8px 0',
-                              'color': textHex,
+                              'color': dimHex,
                             };
-                          }
-                        case 'strong':
-                        case 'b':
-                          return {'color': textHex, 'font-weight': '700'};
-                        case 'em':
-                        case 'i':
-                          return {'color': dimHex};
-                        case 'del':
-                        case 's':
-                          return {'color': dimHex};
-                        case 'blockquote':
-                          return {
-                            'border-left': '3px solid $blueHex',
-                            'background-color': panelHex,
-                            'padding': '10px 14px',
-                            'margin': '8px 0',
-                            'color': dimHex,
-                          };
-                        case 'code':
-                          return {
-                            'color': purpleHex,
-                            'background-color': insetHex,
-                            'font-family': mono.fontFamily ?? '',
-                            'font-size': '${base - 2}px',
-                          };
-                        case 'pre':
-                          return {
-                            'background-color': insetHex,
-                            'border': '1px solid $borderHex',
-                            'padding': '12px',
-                          };
-                        case 'a':
-                          return {'color': blueHex};
-                        case 'hr':
-                          return {
-                            'border': 'none',
-                            'border-top': '1px solid $border2Hex',
-                          };
-                        case 'th':
-                          return {
-                            'color': textHex,
-                            'font-family': mono.fontFamily ?? '',
-                            'font-weight': '600',
-                            'font-size': '${base - 3}px',
-                            'letter-spacing': '0.4px',
-                            'border': 'none',
-                            'border-bottom': '2px solid $blueHex',
-                            'padding': '9px 12px',
-                            'text-align': 'left',
-                          };
-                        case 'td':
-                          return {
-                            'color': textHex,
-                            'font-size': '${base - 2}px',
-                            'border': 'none',
-                            'border-bottom': '1px solid $borderHex',
-                            'padding': '9px 12px',
-                          };
-                        case 'tr':
-                          {
-                            final parent = element.parent;
-                            if (parent == null || parent.localName != 'tbody') {
+                          case 'code':
+                            return {
+                              'color': purpleHex,
+                              'background-color': insetHex,
+                              'font-family': mono.fontFamily ?? '',
+                              'font-size': '${base - 2}px',
+                            };
+                          case 'pre':
+                            return {
+                              'background-color': insetHex,
+                              'border': '1px solid $borderHex',
+                              'padding': '12px',
+                            };
+                          case 'a':
+                            return {'color': blueHex};
+                          case 'hr':
+                            return {
+                              'border': 'none',
+                              'border-top': '1px solid $border2Hex',
+                            };
+                          case 'th':
+                            return {
+                              'color': textHex,
+                              'font-family': mono.fontFamily ?? '',
+                              'font-weight': '600',
+                              'font-size': '${base - 3}px',
+                              'letter-spacing': '0.4px',
+                              'border': 'none',
+                              'border-bottom': '2px solid $blueHex',
+                              'padding': '9px 12px',
+                              'text-align': 'left',
+                            };
+                          case 'td':
+                            return {
+                              'color': textHex,
+                              'font-size': '${base - 2}px',
+                              'border': 'none',
+                              'border-bottom': '1px solid $borderHex',
+                              'padding': '9px 12px',
+                            };
+                          case 'tr':
+                            {
+                              final parent = element.parent;
+                              if (parent == null ||
+                                  parent.localName != 'tbody') {
+                                return null;
+                              }
+                              final rows = parent.children
+                                  .where((e) => e.localName == 'tr')
+                                  .toList();
+                              final rowIndex = rows.indexOf(element);
+                              if (rowIndex >= 0 && rowIndex.isOdd) {
+                                return {'background-color': insetHex};
+                              }
                               return null;
                             }
-                            final rows = parent.children
-                                .where((e) => e.localName == 'tr')
-                                .toList();
-                            final rowIndex = rows.indexOf(element);
-                            if (rowIndex >= 0 && rowIndex.isOdd) {
-                              return {'background-color': insetHex};
-                            }
-                            return null;
-                          }
-                        case 'table':
-                          return {'border': 'none'};
-                      }
-                      return null;
-                    },
+                          case 'table':
+                            return {'border': 'none'};
+                        }
+                        return null;
+                      },
+                    ),
                   ),
                 ),
               ),
-            ),
+      ),
+    );
+  }
+
+  /// Opens a fullscreen, pinch-zoomable view of a network image tapped in
+  /// the rendered document. Tap anywhere to close.
+  void _showImagePreview(String url) {
+    showDialog<void>(
+      context: context,
+      builder: (ctx) => Dialog(
+        backgroundColor: Colors.black,
+        insetPadding: const EdgeInsets.all(12),
+        child: GestureDetector(
+          onTap: () => Navigator.of(ctx).pop(),
+          child: InteractiveViewer(
+            maxScale: 5,
+            child: Center(child: _SniffedNetworkImage(url: url)),
+          ),
+        ),
+      ),
     );
   }
 
