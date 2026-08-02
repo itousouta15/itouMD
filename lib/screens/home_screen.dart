@@ -414,7 +414,7 @@ class _HomeScreenState extends State<HomeScreen> {
                           const SizedBox(height: 6),
                           GestureDetector(
                             onTap: () => launchUrl(
-                              Uri.parse('https://github.com/itouSouta/itouMD'),
+                              Uri.parse('https://github.com/itousouta15/itouMD'),
                             ),
                             child: Text(
                               '如果喜歡的話歡迎到 GitHub 給個 star ♡',
