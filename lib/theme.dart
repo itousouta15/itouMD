@@ -95,7 +95,7 @@ class ItouTheme {
           ),
           labelSmall: GoogleFonts.jetBrainsMono(
             color: c.mute,
-            fontSize: 11,
+            fontSize: 15,
             letterSpacing: 1.2,
           ),
         );
