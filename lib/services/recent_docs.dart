@@ -67,9 +67,7 @@ class RecentDocs {
 
   static Future<List<RecentDoc>> add(RecentDoc doc) async {
     final docs = await load();
-    docs.removeWhere(
-      (d) => d.title == doc.title && d.source == doc.source,
-    );
+    docs.removeWhere((d) => d.title == doc.title && d.source == doc.source);
     docs.insert(0, doc);
     if (docs.length > maxEntries) {
       docs.removeRange(maxEntries, docs.length);
@@ -80,9 +78,7 @@ class RecentDocs {
 
   static Future<List<RecentDoc>> remove(RecentDoc doc) async {
     final docs = await load();
-    docs.removeWhere(
-      (d) => d.title == doc.title && d.source == doc.source,
-    );
+    docs.removeWhere((d) => d.title == doc.title && d.source == doc.source);
     await _save(docs);
     return docs;
   }
