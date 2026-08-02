@@ -48,7 +48,10 @@ dependencies:
   html: ^0.15.6
   highlight: ^0.7.0
   flutter_secure_storage: ^10.3.1
-  sentry_flutter: ^8.14.2
+  sentry_flutter: 9.26.0
+  package_info_plus: ^9.0.1
+  path_provider: ^2.1.6
+  open_filex: ^4.7.0
 
 dev_dependencies:
   flutter_test:
