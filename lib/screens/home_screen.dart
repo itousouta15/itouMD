@@ -72,7 +72,12 @@ class _HomeScreenState extends State<HomeScreen> {
     if (!mounted) return;
     await Navigator.of(context).push(
       MaterialPageRoute(
-        builder: (_) => ViewerScreen(title: title, content: content),
+        builder: (_) => ViewerScreen(
+          title: title,
+          content: content,
+          source: source,
+          sourceRef: sourceRef,
+        ),
       ),
     );
   }
