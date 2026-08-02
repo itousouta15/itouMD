@@ -1,4 +1,4 @@
-<img src="LOGO_nbg.webp" height=70>
+<img src="assets\logo\logo_nbg.webp" height=70>
 <h1>itouMD</h1>
 
 一款用於行動裝置的現代化 Markdown 檢視器
@@ -34,21 +34,74 @@
 - `lib/services/latex_preprocessor.dart`：保護 LaTeX 公式避免被 Markdown 解析破壞。
 - `lib/theme.dart`：自訂應用主題與顏色樣式。
 
-## 安裝與執行
+## 啟動完整流程
 
-1. 安裝 Flutter 開發環境，詳見 Flutter 官方文件。
-2. 開啟專案資料夾：
-   ```bash
-   cd itouMD
-   ```
-3. 取得相依套件：
-   ```bash
-   flutter pub get
-   ```
-4. 執行應用：
-   ```bash
-   flutter run
-   ```
+### 1. 環境需求
+
+- [Flutter SDK](https://docs.flutter.dev/get-started/install)（stable channel，需支援 Dart `^3.12.2`，建議使用最新穩定版）
+- Android 開發：Android Studio + Android SDK
+- iOS 開發（需 macOS）：Xcode + CocoaPods
+- 一台實體裝置、模擬器（Android Emulator）或模擬器（iOS Simulator）
+
+### 2. 取得原始碼
+
+```bash
+git clone https://github.com/itousouta15/itouMD.git
+cd itouMD
+```
+
+### 3. 檢查環境
+
+```bash
+flutter doctor
+```
+
+確認 Flutter、Android toolchain（或 Xcode）皆為 ✓ 再繼續下一步。
+
+### 4. 安裝相依套件
+
+```bash
+flutter pub get
+```
+
+### 5. 確認可用裝置
+
+```bash
+flutter devices
+```
+
+若尚未啟動模擬器，可透過 Android Studio 的 Device Manager 或執行 `open -a Simulator`（macOS，iOS 模擬器）啟動。
+
+### 6. 執行應用（Debug 模式）
+
+```bash
+flutter run
+```
+
+若偵測到多台裝置，可用 `-d` 指定：
+
+```bash
+flutter run -d <device-id>
+```
+
+### 7.（選用）執行測試與靜態分析
+
+```bash
+flutter analyze
+flutter test
+```
+
+### 8.（選用）建置發布版本
+
+```bash
+# Android APK
+flutter build apk --release
+
+# iOS（需 macOS，簽名設定需在 Xcode 完成）
+flutter build ios --release
+```
+
+建置產物分別位於 `build/app/outputs/flutter-apk/`（Android）與 `build/ios/`（iOS）。
 
 ## 支援的依賴套件
 
