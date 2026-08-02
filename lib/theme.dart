@@ -54,8 +54,8 @@ class ItouColors extends ThemeExtension<ItouColors> {
 
   static const dark = ItouColors(
     bg: Color(0xFF1B1E23),
-    panel: Color(0xFF24262B),
-    panelHover: Color(0xFF292C32),
+    panel: Color.fromARGB(255, 34, 36, 41),
+    panelHover: Color(0xFF2A2E35),
     inset: Color(0xFF181B20),
     border: Color(0x12FFFFFF),
     border2: Color(0x24FFFFFF),
