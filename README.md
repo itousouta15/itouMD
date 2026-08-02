@@ -7,6 +7,16 @@
 
 一款用於行動裝置的現代化 Markdown 檢視器與編輯器，深度整合 HackMD。
 
+## 截圖
+
+| 精靈式介紹 | 首頁 | 檢視器 |
+| --- | --- | --- |
+| ![精靈式介紹](docs/screenshots/01-onboarding.png) | ![首頁](docs/screenshots/02-home.png) | ![檢視器](docs/screenshots/03-viewer.png) |
+
+| 編輯模式 | HackMD 筆記列表 | 設定 |
+| --- | --- | --- |
+| ![編輯模式](docs/screenshots/04-editor.png) | ![HackMD 筆記列表](docs/screenshots/05-notes.png) | ![設定](docs/screenshots/06-settings.png) |
+
 ## 功能亮點
 
 ### 閱讀與編輯
