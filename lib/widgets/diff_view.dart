@@ -8,17 +8,18 @@ const kDelColor = Color(0xFFE0777A);
 
 /// Renders line-level [DiffHunk]s the way the sync conflict screen does:
 /// removed lines in red with a `−` marker, added lines in green with a `+`
-/// marker, each hunk capped at [maxLinesPerHunk] with a "還有 N 行" tail.
-/// Shared by the conflict screen and the AI assistant's add/remove preview.
+/// marker. When [maxLinesPerHunk] is set, each hunk is capped at that many
+/// lines with a "還有 N 行" tail; `null` (default) shows the whole diff —
+/// callers wrapping in a scroll view get the full add/remove picture.
 class DiffView extends StatelessWidget {
   final List<DiffHunk> hunks;
-  final int maxLinesPerHunk;
+  final int? maxLinesPerHunk;
   final ItouColors c;
 
   const DiffView({
     super.key,
     required this.hunks,
-    this.maxLinesPerHunk = 6,
+    this.maxLinesPerHunk,
     required this.c,
   });
 
@@ -29,11 +30,13 @@ class DiffView extends StatelessWidget {
       fontSize: 11.5,
       height: 1.5,
     );
+    final cap = maxLinesPerHunk;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         for (final hunk in hunks) ...[
-          for (final line in hunk.removed.take(maxLinesPerHunk))
+          for (final line
+              in cap == null ? hunk.removed : hunk.removed.take(cap))
             _DiffLine(
               text: line,
               color: kDelColor,
@@ -41,13 +44,13 @@ class DiffView extends StatelessWidget {
               mono: mono,
               c: c,
             ),
-          if (hunk.removed.length > maxLinesPerHunk)
+          if (cap != null && hunk.removed.length > cap)
             _DiffMoreLine(
-              count: hunk.removed.length - maxLinesPerHunk,
+              count: hunk.removed.length - cap,
               color: kDelColor,
               c: c,
             ),
-          for (final line in hunk.added.take(maxLinesPerHunk))
+          for (final line in cap == null ? hunk.added : hunk.added.take(cap))
             _DiffLine(
               text: line,
               color: kAddColor,
@@ -55,9 +58,9 @@ class DiffView extends StatelessWidget {
               mono: mono,
               c: c,
             ),
-          if (hunk.added.length > maxLinesPerHunk)
+          if (cap != null && hunk.added.length > cap)
             _DiffMoreLine(
-              count: hunk.added.length - maxLinesPerHunk,
+              count: hunk.added.length - cap,
               color: kAddColor,
               c: c,
             ),
