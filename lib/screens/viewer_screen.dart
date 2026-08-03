@@ -27,7 +27,10 @@ import '../services/recent_docs.dart';
 import '../services/sync_history.dart';
 import '../services/sync_prefs.dart';
 import '../theme.dart';
+import '../widgets/color_swatch_row.dart';
+import '../widgets/hsv_color_picker.dart';
 import '../widgets/loader_ring.dart';
+import '../widgets/reader_font_picker.dart';
 import 'conflict_screen.dart';
 import 'hackmd_account_screen.dart';
 
@@ -1363,150 +1366,73 @@ class _ReaderSettingsSheetState extends State<_ReaderSettingsSheet> {
           color: c.panel,
           border: Border.all(color: c.border2),
         ),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            SectionLabel('字體'),
-            const SizedBox(height: 10),
-            Wrap(
-              spacing: 8,
-              runSpacing: 8,
-              children: ReaderFontFamily.values.map((f) {
-                final selected = _prefs.fontFamily == f;
-                return SizedBox(
-                  width: 78,
-                  child: _ChoiceTile(
-                    label: f.label,
-                    selected: selected,
-                    previewStyle: f.textStyle(),
-                    onTap: () => _update(_prefs.copyWith(fontFamily: f)),
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              SectionLabel('字體'),
+              const SizedBox(height: 10),
+              ReaderFontPicker(
+                selected: _prefs.fontFamily,
+                onChanged: (f) => _update(_prefs.copyWith(fontFamily: f)),
+              ),
+              const SizedBox(height: 20),
+              Row(
+                children: [
+                  SectionLabel('字級'),
+                  const Spacer(),
+                  Text(
+                    _prefs.fontSize.toStringAsFixed(0),
+                    style: TextStyle(color: c.dim, fontSize: 12),
                   ),
-                );
-              }).toList(),
-            ),
-            const SizedBox(height: 20),
-            Row(
-              children: [
-                SectionLabel('字級'),
-                const Spacer(),
-                Text(
-                  _prefs.fontSize.toStringAsFixed(0),
-                  style: TextStyle(color: c.dim, fontSize: 12),
+                ],
+              ),
+              SliderTheme(
+                data: SliderThemeData(
+                  activeTrackColor: c.blue,
+                  inactiveTrackColor: c.border2,
+                  thumbColor: c.blue,
+                  overlayColor: c.blue.withValues(alpha: 0.15),
+                  trackHeight: 2,
                 ),
-              ],
-            ),
-            SliderTheme(
-              data: SliderThemeData(
-                activeTrackColor: c.blue,
-                inactiveTrackColor: c.border2,
-                thumbColor: c.blue,
-                overlayColor: c.blue.withValues(alpha: 0.15),
-                trackHeight: 2,
+                child: Slider(
+                  value: _prefs.fontSize,
+                  min: ReaderPrefs.minFontSize,
+                  max: ReaderPrefs.maxFontSize,
+                  divisions:
+                      ((ReaderPrefs.maxFontSize - ReaderPrefs.minFontSize) /
+                              0.5)
+                          .round(),
+                  onChanged: (v) => _update(_prefs.copyWith(fontSize: v)),
+                ),
               ),
-              child: Slider(
-                value: _prefs.fontSize,
-                min: ReaderPrefs.minFontSize,
-                max: ReaderPrefs.maxFontSize,
-                divisions:
-                    ((ReaderPrefs.maxFontSize - ReaderPrefs.minFontSize) / 0.5)
-                        .round(),
-                onChanged: (v) => _update(_prefs.copyWith(fontSize: v)),
+              const SizedBox(height: 10),
+              SectionLabel('文字顏色'),
+              const SizedBox(height: 12),
+              ReaderColorRow(
+                selected: _prefs.textColor,
+                customColor: _prefs.customColor,
+                brightness: brightness,
+                onSwatch: (tc) => _update(_prefs.copyWith(textColor: tc)),
+                onCustom: _pickReaderColor,
               ),
-            ),
-            const SizedBox(height: 10),
-            SectionLabel('文字顏色'),
-            const SizedBox(height: 12),
-            Wrap(
-              spacing: 8,
-              runSpacing: 10,
-              children: ReaderTextColor.values.map((tc) {
-                final selected = _prefs.textColor == tc;
-                final swatch = tc == ReaderTextColor.custom
-                    ? _prefs.customColor
-                    : tc.resolve(c, brightness);
-                return GestureDetector(
-                  onTap: () => _update(_prefs.copyWith(textColor: tc)),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Container(
-                        width: 24,
-                        height: 24,
-                        decoration: BoxDecoration(
-                          color: swatch,
-                          shape: BoxShape.circle,
-                          border: Border.all(
-                            color: selected ? c.blue : c.border2,
-                            width: selected ? 2.5 : 1,
-                          ),
-                        ),
-                        child: tc == ReaderTextColor.custom
-                            ? const Icon(
-                                Icons.add,
-                                size: 14,
-                                color: Colors.white,
-                              )
-                            : null,
-                      ),
-                      const SizedBox(width: 4),
-                      Text(
-                        tc.label,
-                        style: TextStyle(
-                          color: selected ? c.text : c.dim,
-                          fontSize: 12,
-                          fontWeight: selected
-                              ? FontWeight.w600
-                              : FontWeight.w400,
-                        ),
-                      ),
-                    ],
-                  ),
-                );
-              }).toList(),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );
   }
-}
 
-class _ChoiceTile extends StatelessWidget {
-  final String label;
-  final bool selected;
-  final VoidCallback onTap;
-  final TextStyle? previewStyle;
-
-  const _ChoiceTile({
-    required this.label,
-    required this.selected,
-    required this.onTap,
-    this.previewStyle,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final c = ItouColorsExt.of(context);
-    final base = previewStyle ?? const TextStyle();
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 12),
-        alignment: Alignment.center,
-        decoration: BoxDecoration(
-          color: selected ? c.panelHover : c.inset,
-          border: Border.all(color: selected ? c.blue : c.border),
-        ),
-        child: Text(
-          label,
-          style: base.copyWith(
-            color: selected ? c.text : c.dim,
-            fontSize: 13,
-            fontWeight: selected ? FontWeight.w600 : FontWeight.w400,
-          ),
-        ),
-      ),
+  /// Opens the shared HSV picker for the reader's custom text colour.
+  Future<void> _pickReaderColor() async {
+    final result = await showHsvColorPicker(
+      context,
+      initial: _prefs.customColor,
+    );
+    if (!mounted || result == null) return;
+    _update(
+      _prefs.copyWith(textColor: ReaderTextColor.custom, customColor: result),
     );
   }
 }

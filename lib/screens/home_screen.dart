@@ -6,8 +6,10 @@ import 'package:package_info_plus/package_info_plus.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../services/hackmd_account.dart';
+import '../services/hackmd_api.dart';
 import '../services/markdown_source.dart';
 import '../services/recent_docs.dart';
+import '../services/theme_prefs.dart';
 import '../services/ui_prefs.dart';
 import '../services/update_checker.dart';
 import '../theme.dart';
@@ -20,14 +22,18 @@ import 'viewer_screen.dart';
 
 class HomeScreen extends StatefulWidget {
   final ThemeMode themeMode;
-  final VoidCallback onToggleTheme;
+  final ValueChanged<ThemeMode> onThemeModeChanged;
+  final ThemeCustomization customization;
+  final ValueChanged<ThemeCustomization> onCustomizationChanged;
   final UiScale uiScale;
   final ValueChanged<UiScale> onUiScaleChanged;
 
   const HomeScreen({
     super.key,
     required this.themeMode,
-    required this.onToggleTheme,
+    required this.onThemeModeChanged,
+    required this.customization,
+    required this.onCustomizationChanged,
     required this.uiScale,
     required this.onUiScaleChanged,
   });
@@ -219,7 +225,9 @@ class _HomeScreenState extends State<HomeScreen> {
                   MaterialPageRoute(
                     builder: (_) => SettingsScreen(
                       themeMode: widget.themeMode,
-                      onToggleTheme: widget.onToggleTheme,
+                      onThemeModeChanged: widget.onThemeModeChanged,
+                      customization: widget.customization,
+                      onCustomizationChanged: widget.onCustomizationChanged,
                       uiScale: widget.uiScale,
                       onUiScaleChanged: widget.onUiScaleChanged,
                     ),
