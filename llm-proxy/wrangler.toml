@@ -1,0 +1,11 @@
+name = "itoumd-llm-proxy"
+main = "worker.js"
+compatibility_date = "2026-08-03"
+
+# Production domain. Deploying requires ownership of itousouta.me in the
+# Cloudflare account; until then, the Worker is reachable at its
+# workers.dev URL and the app's builtin base URL simply stays broken.
+routes = [{ pattern = "llm.itousouta.me", custom_domain = true }]
+
+[observability]
+enabled = true
