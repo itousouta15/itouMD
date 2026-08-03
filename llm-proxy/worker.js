@@ -117,12 +117,36 @@ async function fallbackWorkersAI(env, body) {
     const result = await env.AI.run(FALLBACK_AI_MODEL, { messages });
     const content = result?.response ?? result?.output_text;
     if (!content || typeof content !== 'string') return null;
+    const model = body?.model ?? FALLBACK_AI_MODEL;
+    if (body?.stream === true) {
+      // The client always parses SSE — wrap the single completion in one
+      // data chunk plus the [DONE] terminator.
+      const payload = {
+        id: 'chatcmpl-workers-ai',
+        object: 'chat.completion.chunk',
+        created: Math.floor(Date.now() / 1000),
+        model,
+        choices: [
+          { index: 0, delta: { role: 'assistant', content }, finish_reason: 'stop' },
+        ],
+      };
+      const sse =
+        `data: ${JSON.stringify(payload)}\n\n` + 'data: [DONE]\n\n';
+      return new Response(sse, {
+        status: 200,
+        headers: {
+          'Content-Type': 'text/event-stream',
+          'Cache-Control': 'no-cache',
+          ...corsHeaders(),
+        },
+      });
+    }
     return json(
       {
         id: 'chatcmpl-workers-ai',
         object: 'chat.completion',
         created: Math.floor(Date.now() / 1000),
-        model: body?.model ?? FALLBACK_AI_MODEL,
+        model,
         choices: [
           {
             index: 0,
