@@ -87,4 +87,41 @@ void main() {
       expect(result.remoteRemovedLines, 0);
     });
   });
+
+  group('diffTexts', () {
+    test('無變更', () {
+      final hunks = diffTexts('A\nB\nC\n', 'A\nB\nC\n');
+      expect(hunks, isEmpty);
+      expect(diffStats(hunks), (0, 0));
+    });
+
+    test('純新增', () {
+      final hunks = diffTexts('A\nB\n', 'A\nB\nC\nD\n');
+      expect(hunks, hasLength(1));
+      expect(hunks.single.removed, isEmpty);
+      expect(hunks.single.added, ['C', 'D']);
+      expect(diffStats(hunks), (2, 0));
+    });
+
+    test('純刪除', () {
+      final hunks = diffTexts('A\nB\nC\n', 'A\nC\n');
+      expect(hunks, hasLength(1));
+      expect(hunks.single.removed, ['B']);
+      expect(hunks.single.added, isEmpty);
+      expect(diffStats(hunks), (0, 1));
+    });
+
+    test('修改', () {
+      final hunks = diffTexts('A\nB\nC\n', 'A\nX\nC\n');
+      expect(hunks, hasLength(1));
+      expect(hunks.single.removed, ['B']);
+      expect(hunks.single.added, ['X']);
+      expect(diffStats(hunks), (1, 1));
+    });
+
+    test('CRLF 正規化', () {
+      final hunks = diffTexts('A\r\nB\r\n', 'A\nB\n');
+      expect(hunks, isEmpty);
+    });
+  });
 }
