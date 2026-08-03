@@ -26,16 +26,37 @@ void main() {
     expect(find.text('手機也能好好用 MD'), findsOneWidget);
     expect(find.text('下一步'), findsOneWidget);
 
-    // Step through to the last page, then start.
-    for (var i = 0; i < 3; i++) {
+    // Step through to the last page (5 pages: 3 intro + 2 account links),
+    // then start.
+    for (var i = 0; i < 4; i++) {
       await tester.tap(find.text('下一步'));
       await tester.pumpAndSettle();
     }
+    expect(find.text('連結 GitHub'), findsOneWidget);
     expect(find.text('開始使用'), findsOneWidget);
     await tester.tap(find.text('開始使用'));
     await tester.pumpAndSettle();
 
     expect(find.text('貼上文字'), findsOneWidget);
+  });
+
+  testWidgets('Onboarding account pages show login buttons', (
+    WidgetTester tester,
+  ) async {
+    SharedPreferences.setMockInitialValues({});
+    await tester.pumpWidget(const ItouMdApp(onboardingDone: false));
+    await tester.pumpAndSettle();
+
+    // Page 4: HackMD login guidance.
+    await tester.tap(find.text('下一步'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('下一步'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('下一步'));
+    await tester.pumpAndSettle();
+    expect(find.text('連結 HackMD'), findsOneWidget);
+    expect(find.text('登入 HackMD'), findsOneWidget);
+    expect(find.text('尚未連結'), findsOneWidget);
   });
 
   testWidgets('Onboarding can be skipped straight to home', (
