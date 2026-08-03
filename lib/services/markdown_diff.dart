@@ -36,6 +36,44 @@ class AutoAppliedHunk {
   const AutoAppliedHunk({required this.removed, required this.added});
 }
 
+/// A line-level change between two texts: [removed] lines from the original
+/// were replaced by [added] lines (either may be empty for pure
+/// insert/delete hunks).
+class DiffHunk {
+  final List<String> removed;
+  final List<String> added;
+
+  const DiffHunk({required this.removed, required this.added});
+}
+
+/// Two-way line diff: what it would take to turn [original] into [revised]
+/// (line endings normalised to `\n`). Used by the AI assistant's
+/// add/remove preview — the same Myers machinery as the merge.
+List<DiffHunk> diffTexts(String original, String revised) {
+  final a = _lines(original);
+  final b = _lines(revised);
+  final hunks = _toHunks(a, b);
+  return hunks
+      .map(
+        (h) => DiffHunk(
+          removed: a.sublist(h.baseStart, h.baseEnd).toList(),
+          added: h.lines,
+        ),
+      )
+      .toList();
+}
+
+/// Total added/removed line counts across [hunks].
+(int added, int removed) diffStats(List<DiffHunk> hunks) {
+  var added = 0;
+  var removed = 0;
+  for (final hunk in hunks) {
+    added += hunk.added.length;
+    removed += hunk.removed.length;
+  }
+  return (added, removed);
+}
+
 class MergeResult {
   final List<MergeSegment> segments;
   final List<AutoAppliedHunk> autoApplied;
