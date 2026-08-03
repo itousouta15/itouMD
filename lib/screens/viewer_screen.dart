@@ -17,6 +17,8 @@ import 'package:html/dom.dart' as dom;
 import 'package:http/http.dart' as http;
 import 'package:url_launcher/url_launcher.dart';
 
+import '../services/github_account.dart';
+import '../services/github_api.dart';
 import '../services/hackmd_account.dart';
 import '../services/hackmd_api.dart';
 import '../services/llm_client.dart';
@@ -34,6 +36,7 @@ import '../widgets/hsv_color_picker.dart';
 import '../widgets/loader_ring.dart';
 import '../widgets/reader_font_picker.dart';
 import 'conflict_screen.dart';
+import 'github_account_screen.dart';
 import 'hackmd_account_screen.dart';
 
 /// Turns "press Enter on a list item" into "continue the list" instead of a
@@ -316,6 +319,7 @@ class _ViewerScreenState extends State<ViewerScreen> {
   int? _scrollToLine;
   bool _editing = false;
   bool _syncingToHackmd = false;
+  bool _syncingToGithub = false;
   // Resolved lazily on first sync/open-refresh (custom-aliased HackMD URLs
   // need a notes-list lookup to find their real id, and team notes need the
   // team path too) and cached so repeat syncs don't re-fetch everything.
@@ -335,6 +339,14 @@ class _ViewerScreenState extends State<ViewerScreen> {
     final ref = widget.sourceRef;
     if (widget.source != RecentDocSource.url || ref == null) return false;
     return Uri.tryParse(ref)?.host == 'hackmd.io';
+  }
+
+  /// Whether this doc was fetched from a `github.com` URL — the only source
+  /// a "write back to GitHub" action makes sense for.
+  bool get _isGithubDoc {
+    final ref = widget.sourceRef;
+    if (widget.source != RecentDocSource.url || ref == null) return false;
+    return GithubApi.parseUrl(ref) != null;
   }
 
   @override
@@ -755,6 +767,171 @@ class _ViewerScreenState extends State<ViewerScreen> {
     }
   }
 
+  /// Pushes local edits back to a file that was opened from a `github.com`
+  /// URL, mirroring the HackMD sync flow: fetch the current remote (with
+  /// its SHA), diff against the baseline with the shared three-way merge
+  /// screen when it moved, then write back via the Contents API carrying
+  /// the SHA so concurrent changes fail loudly instead of silently
+  /// overwriting.
+  Future<void> _syncToGithub(BuildContext context) async {
+    final ref = widget.sourceRef;
+    final target = ref == null ? null : GithubApi.parseUrl(ref);
+    if (target == null) return;
+
+    final token = await GithubAccount.getToken();
+    if (!context.mounted) return;
+    if (token == null || token.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: const Text('還沒連結 GitHub 帳號'),
+          action: SnackBarAction(
+            label: '設定',
+            onPressed: () => Navigator.of(context).push(
+              MaterialPageRoute(builder: (_) => const GithubAccountScreen()),
+            ),
+          ),
+        ),
+      );
+      return;
+    }
+
+    setState(() => _syncingToGithub = true);
+    try {
+      final remote = await GithubApi.getFile(token, target);
+
+      var text = _editing ? _editController.text : _content;
+      var merged = false;
+      if (remote.content != _baselineContent) {
+        final resolution = await SyncPrefs.conflictResolution;
+        if (!context.mounted) return;
+        switch (resolution) {
+          case ConflictResolution.cancel:
+            return;
+          case ConflictResolution.ask:
+            final outcome = await Navigator.of(context).push<MergeOutcome>(
+              MaterialPageRoute(
+                builder: (_) => ConflictScreen(
+                  base: _baselineContent,
+                  local: text,
+                  remote: remote.content,
+                ),
+              ),
+            );
+            if (!context.mounted) return;
+            if (outcome == null) return;
+            text = outcome.text;
+            merged = outcome.action == MergeAction.merged;
+          case ConflictResolution.overwrite:
+            break;
+        }
+      }
+
+      await GithubApi.updateFile(
+        token,
+        target,
+        text,
+        sha: remote.sha,
+        branch: target.branch.isEmpty ? null : target.branch,
+      );
+      _baselineContent = text;
+      NoteCache.saveNote(widget.sourceRef!, widget.title, text);
+      final pushedAt = DateTime.now();
+      final noteId = 'github:${target.owner}/${target.repo}:${target.path}';
+      await SyncHistory.saveUndo(
+        UndoSlot(
+          noteId: noteId,
+          title: widget.title,
+          priorContent: remote.content,
+          pushedAt: pushedAt,
+        ),
+      );
+      await SyncHistory.add(
+        SyncEntry(
+          noteId: noteId,
+          title: widget.title,
+          action: merged ? SyncAction.merged : SyncAction.overwrite,
+          pushedAt: pushedAt,
+        ),
+      );
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            merged ? '已合併並寫回 GitHub (｡•ᴗ•｡)' : '已寫回 GitHub (｡•ᴗ•｡)',
+          ),
+          duration: const Duration(seconds: 10),
+          action: SnackBarAction(
+            label: '復原',
+            onPressed: () => _undoGithubSync(context),
+          ),
+        ),
+      );
+    } on GithubApiException catch (e) {
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(e.message)));
+    } catch (_) {
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('寫回失敗，再試一次看看 (´;ω;`)')));
+    } finally {
+      if (mounted) setState(() => _syncingToGithub = false);
+    }
+  }
+
+  /// Restores the GitHub file to the content it had before the last
+  /// write-back (the "復原" action on the success snackbar).
+  Future<void> _undoGithubSync(BuildContext context) async {
+    final token = await GithubAccount.getToken();
+    if (!context.mounted) return;
+    if (token == null || token.isEmpty) return;
+    final slot = await SyncHistory.loadUndo();
+    if (!context.mounted) return;
+    if (slot == null) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('沒有可復原的寫回 (´;ω;`)')));
+      return;
+    }
+    final target = GithubApi.parseUrl(widget.sourceRef!);
+    if (target == null) return;
+    try {
+      final current = await GithubApi.getFile(token, target);
+      await GithubApi.updateFile(
+        token,
+        target,
+        slot.priorContent,
+        sha: current.sha,
+        branch: target.branch.isEmpty ? null : target.branch,
+      );
+      await SyncHistory.clearUndo();
+      if (!mounted) return;
+      setState(() {
+        _content = slot.priorContent;
+        _baselineContent = slot.priorContent;
+        _editController.text = slot.priorContent;
+      });
+      _render(slot.priorContent);
+      NoteCache.saveNote(widget.sourceRef!, slot.title, slot.priorContent);
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('已復原寫回 (｡•ᴗ•｡)')));
+    } on GithubApiException catch (e) {
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(e.message)));
+    } catch (_) {
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('復原失敗，再試一次看看 (´;ω;`)')));
+    }
+  }
+
   void _updatePrefs(ReaderPrefs next) {
     setState(() => _prefs = next);
     next.save();
@@ -970,6 +1147,18 @@ class _ViewerScreenState extends State<ViewerScreen> {
               onPressed: () => launchUrl(Uri.parse(widget.sourceRef!)),
             ),
           ],
+          if (_isGithubDoc)
+            IconButton(
+              tooltip: '寫回 GitHub',
+              icon: _syncingToGithub
+                  ? const SizedBox(
+                      width: 20,
+                      height: 20,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : const Icon(Icons.upload_outlined),
+              onPressed: _syncingToGithub ? null : () => _syncToGithub(context),
+            ),
           if (!_editing)
             PopupMenuButton<String>(
               tooltip: '更多',
