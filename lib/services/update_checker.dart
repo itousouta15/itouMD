@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:flutter/services.dart';
 import 'package:http/http.dart' as http;
 import 'package:open_filex/open_filex.dart';
 import 'package:package_info_plus/package_info_plus.dart';
@@ -102,9 +103,9 @@ class UpdateChecker {
     return parts.take(3).toList();
   }
 
-  /// Downloads the APK into the app cache and hands it to the system
-  /// installer. [onProgress] reports 0..1 as bytes arrive.
-  static Future<void> downloadAndInstall(
+  /// Downloads the APK into the app cache. [onProgress] reports 0..1 as
+  /// bytes arrive.
+  static Future<File> downloadApk(
     String url, {
     void Function(double progress)? onProgress,
   }) async {
@@ -117,7 +118,7 @@ class UpdateChecker {
     final request = http.Request('GET', Uri.parse(url));
     final streamed = await http.Client().send(request);
     if (streamed.statusCode != 200) {
-      throw Exception('下載失敗，HTTP ${streamed.statusCode}');
+      throw Exception('HTTP ${streamed.statusCode}');
     }
 
     final total = streamed.contentLength;
@@ -134,10 +135,41 @@ class UpdateChecker {
     } finally {
       await sink.close();
     }
+    return file;
+  }
 
+  /// Hands the downloaded APK to the system installer. Throws when the
+  /// installer can't be launched (permission, no handler, ...).
+  static Future<void> installApk(File file) async {
     final result = await OpenFilex.open(file.path);
     if (result.type != ResultType.done) {
       throw Exception(result.message);
+    }
+  }
+}
+
+/// Thin wrapper over the Android platform channel that checks/opens the
+/// "install unknown apps" permission, which Android 8+ requires before the
+/// system installer will open an APK.
+class InstallHelper {
+  static const _channel = MethodChannel('itou_md/install');
+
+  static Future<bool> canRequestPackageInstalls() async {
+    if (!Platform.isAndroid) return true;
+    try {
+      return await _channel.invokeMethod<bool>('canRequestPackageInstalls') ??
+          true;
+    } catch (_) {
+      // Channel unavailable (non-Android/old build) — attempt anyway.
+      return true;
+    }
+  }
+
+  static Future<void> openUnknownAppSourcesSettings() async {
+    try {
+      await _channel.invokeMethod<void>('openUnknownAppSourcesSettings');
+    } catch (_) {
+      // Best effort; the generic app-settings fallback lives in Kotlin.
     }
   }
 }
