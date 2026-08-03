@@ -185,7 +185,10 @@ class _HomeScreenState extends State<HomeScreen> {
   /// (private repos included) when one is connected, public fetch otherwise.
   Future<void> _openGithubRepo() async {
     final input = _githubRepoController.text.trim();
-    if (input.isEmpty) return;
+    if (input.isEmpty) {
+      setState(() => _error = '請先輸入 owner/repo（例如 itousouta15/itouMD）(´;ω;`)');
+      return;
+    }
     setState(() {
       _busy = true;
       _error = null;
