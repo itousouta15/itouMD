@@ -19,6 +19,8 @@ import 'package:url_launcher/url_launcher.dart';
 
 import '../services/hackmd_account.dart';
 import '../services/hackmd_api.dart';
+import '../services/llm_client.dart';
+import '../services/llm_prefs.dart';
 import '../services/markdown_editor_actions.dart';
 import '../services/markdown_renderer.dart';
 import '../services/note_cache.dart';
@@ -1096,6 +1098,7 @@ class _ViewerScreenState extends State<ViewerScreen> {
                     onNumberedList: () => _toolbarLinePrefix('1. '),
                     onTaskList: () => _toolbarLinePrefix('- [ ] '),
                     onLink: _toolbarLink,
+                    onAi: _openAiAssistant,
                   ),
                 ],
               )
@@ -1370,6 +1373,232 @@ class _ViewerScreenState extends State<ViewerScreen> {
       },
     );
   }
+
+  /// Opens the AI writing assistant for the current edit session. Returns
+  /// the (result, target range) pair so the caller can splice the AI output
+  /// into the controller — selection stays selected-text-only, otherwise
+  /// the whole document is replaced.
+  Future<void> _openAiAssistant() async {
+    final sel = _editController.selection;
+    final hasSelection = sel.isValid && !sel.isCollapsed;
+    final result = await showModalBottomSheet<(String, TextRange)>(
+      context: context,
+      backgroundColor: Colors.transparent,
+      isScrollControlled: true,
+      builder: (sheetContext) => _AiAssistantSheet(
+        docText: _editController.text,
+        selection: sel,
+        hasSelection: hasSelection,
+      ),
+    );
+    if (result == null || !mounted) return;
+    final (newText, range) = result;
+    final text = _editController.text;
+    final replaced = text.replaceRange(range.start, range.end, newText);
+    _editController.value = TextEditingValue(
+      text: replaced,
+      selection: TextSelection.collapsed(offset: range.start + newText.length),
+    );
+    _editFocusNode.requestFocus();
+  }
+}
+
+/// Instruction presets for the AI assistant: label + prompt template where
+/// `{text}` is replaced by the selected text (or the whole document).
+const _aiInstructions = <(String, String)>[
+  ('潤飾', '請潤飾以下內容，讓它更通順自然，保留 Markdown 格式：\n\n{text}'),
+  ('翻譯成繁體中文', '請將以下內容翻譯成繁體中文，保留 Markdown 格式：\n\n{text}'),
+  ('縮寫', '請將以下內容縮短並保留重點，保留 Markdown 格式：\n\n{text}'),
+  ('改寫', '請以不同寫法改寫以下內容、保留原意，保留 Markdown 格式：\n\n{text}'),
+  ('生成摘要', '請為以下內容生成簡短摘要，保留 Markdown 格式：\n\n{text}'),
+];
+
+/// The editor's AI assistant sheet: pick an instruction, wait for the LLM,
+/// preview the result, then splice it back. Pops `(result, targetRange)` on
+/// 套用.
+class _AiAssistantSheet extends StatefulWidget {
+  final String docText;
+  final TextSelection selection;
+  final bool hasSelection;
+
+  const _AiAssistantSheet({
+    required this.docText,
+    required this.selection,
+    required this.hasSelection,
+  });
+
+  @override
+  State<_AiAssistantSheet> createState() => _AiAssistantSheetState();
+}
+
+class _AiAssistantSheetState extends State<_AiAssistantSheet> {
+  bool _busy = false;
+  String? _error;
+  String? _result;
+
+  /// The text the LLM will process: the selection when there is one,
+  /// otherwise the whole document.
+  String get _targetText => widget.hasSelection
+      ? widget.docText.substring(widget.selection.start, widget.selection.end)
+      : widget.docText;
+
+  TextRange get _targetRange => widget.hasSelection
+      ? TextRange(start: widget.selection.start, end: widget.selection.end)
+      : TextRange(start: 0, end: widget.docText.length);
+
+  Future<void> _run(String instruction) async {
+    setState(() {
+      _busy = true;
+      _error = null;
+      _result = null;
+    });
+    try {
+      final useBuiltin = await LlmPrefs.useBuiltin;
+      final baseUrl = (await LlmPrefs.baseUrl)!;
+      final model = (await LlmPrefs.model)!;
+      final apiKey = useBuiltin ? null : await LlmPrefs.apiKey;
+      final reply = await LlmClient.complete(
+        baseUrl: baseUrl,
+        model: model,
+        apiKey: apiKey,
+        userPrompt: instruction.replaceFirst('{text}', _targetText),
+      );
+      if (mounted) setState(() => _result = reply);
+    } on LlmException catch (e) {
+      if (mounted) setState(() => _error = e.message);
+    } catch (_) {
+      if (mounted) setState(() => _error = 'AI 處理失敗，再試一次看看 (´;ω;`)');
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  void _apply() {
+    final result = _result;
+    if (result == null) return;
+    Navigator.of(context).pop((result, _targetRange));
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final c = ItouColorsExt.of(context);
+    return SafeArea(
+      child: Container(
+        margin: const EdgeInsets.all(12),
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: c.panel,
+          border: Border.all(color: c.border2),
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Row(
+              children: [
+                Icon(Icons.auto_awesome, size: 18, color: c.blue),
+                const SizedBox(width: 8),
+                Text(
+                  'AI 助理',
+                  style: TextStyle(
+                    color: c.text,
+                    fontSize: 14,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                const Spacer(),
+                Text(
+                  widget.hasSelection ? '已選取 ${_targetText.length} 字' : '整篇文件',
+                  style: TextStyle(color: c.mute, fontSize: 11),
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: [
+                for (final (label, prompt) in _aiInstructions)
+                  GestureDetector(
+                    onTap: _busy ? null : () => _run(prompt),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                        vertical: 8,
+                        horizontal: 12,
+                      ),
+                      decoration: BoxDecoration(
+                        color: c.inset,
+                        border: Border.all(color: c.border),
+                      ),
+                      child: Text(
+                        label,
+                        style: TextStyle(color: c.text, fontSize: 12),
+                      ),
+                    ),
+                  ),
+              ],
+            ),
+            if (_busy) ...[
+              const SizedBox(height: 14),
+              LinearProgressIndicator(
+                minHeight: 3,
+                backgroundColor: c.border2,
+                color: c.blue,
+              ),
+              const SizedBox(height: 6),
+              Text('AI 處理中…', style: TextStyle(color: c.mute, fontSize: 11)),
+            ],
+            if (_error != null) ...[
+              const SizedBox(height: 12),
+              Text(
+                _error!,
+                style: const TextStyle(color: Color(0xFFE0777A), fontSize: 12),
+              ),
+            ],
+            if (_result != null) ...[
+              const SizedBox(height: 12),
+              Container(
+                constraints: const BoxConstraints(maxHeight: 220),
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(
+                  color: c.inset,
+                  border: Border.all(color: c.border),
+                ),
+                child: SingleChildScrollView(
+                  child: Text(
+                    _result!,
+                    style: TextStyle(
+                      color: c.text,
+                      fontSize: 12.5,
+                      height: 1.5,
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 12),
+              Row(
+                children: [
+                  Expanded(
+                    child: OutlinedButton(
+                      onPressed: () => Navigator.of(context).pop(),
+                      child: const Text('取消'),
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: ElevatedButton(
+                      onPressed: _apply,
+                      child: const Text('套用'),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
 }
 
 /// A horizontally-scrolling row of Markdown formatting shortcuts, docked
@@ -1389,6 +1618,7 @@ class _EditorToolbar extends StatelessWidget {
   final VoidCallback onNumberedList;
   final VoidCallback onTaskList;
   final VoidCallback onLink;
+  final VoidCallback onAi;
 
   const _EditorToolbar({
     required this.c,
@@ -1403,6 +1633,7 @@ class _EditorToolbar extends StatelessWidget {
     required this.onNumberedList,
     required this.onTaskList,
     required this.onLink,
+    required this.onAi,
   });
 
   Widget _btn(IconData icon, String tooltip, VoidCallback onTap) {
@@ -1445,6 +1676,7 @@ class _EditorToolbar extends StatelessWidget {
               _btn(Icons.format_list_numbered, '編號清單', onNumberedList),
               _btn(Icons.check_box_outlined, '待辦清單', onTaskList),
               _btn(Icons.link, '連結', onLink),
+              _btn(Icons.auto_awesome, 'AI 助理', onAi),
             ],
           ),
         ),
