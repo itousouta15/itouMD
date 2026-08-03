@@ -24,6 +24,10 @@ const ALLOWED_MODELS = new Set([
   'mimo-v2.5-free',
 ]);
 
+// Fallback model used when Zen is down/rate-limited: Cloudflare Workers AI
+// (free tier, no external key). Qwen3 handles Traditional Chinese well.
+const FALLBACK_AI_MODEL = '@cf/qwen/qwen3-30b-a3b-fp8';
+
 // Simple per-IP sliding window: at most 10 requests per 10 seconds. Kept in
 // module scope; a cold start just resets the window.
 const RATE_LIMIT_MAX = 10;
@@ -80,20 +84,60 @@ export default {
         body: JSON.stringify(body),
       });
 
-      const contentType = upstream.headers.get('content-type') ?? '';
-      const responseBody = await upstream.arrayBuffer();
-      return new Response(responseBody, {
-        status: upstream.status,
-        headers: {
-          'Content-Type': contentType,
-          ...corsHeaders(),
-        },
-      });
+      if (upstream.status < 400) {
+        const contentType = upstream.headers.get('content-type') ?? '';
+        const responseBody = await upstream.arrayBuffer();
+        return new Response(responseBody, {
+          status: upstream.status,
+          headers: {
+            'Content-Type': contentType,
+            ...corsHeaders(),
+          },
+        });
+      }
+
+      // Zen failed (rate limit, outage, ...) — fall back to Workers AI so
+      // the built-in quota keeps working.
+      const fallback = await fallbackWorkersAI(env, body);
+      if (fallback) return fallback;
+      return json({ error: { message: 'AI 服務暫時出問題 (´;ω;`)' } }, 502);
     } catch (_) {
+      const fallback = await fallbackWorkersAI(env, body);
+      if (fallback) return fallback;
       return json({ error: { message: 'AI 服務暫時出問題 (´;ω;`)' } }, 502);
     }
   },
 };
+
+async function fallbackWorkersAI(env, body) {
+  try {
+    const messages = Array.isArray(body?.messages)
+      ? body.messages
+      : [{ role: 'user', content: '你好' }];
+    const result = await env.AI.run(FALLBACK_AI_MODEL, { messages });
+    const content = result?.response ?? result?.output_text;
+    if (!content || typeof content !== 'string') return null;
+    return json(
+      {
+        id: 'chatcmpl-workers-ai',
+        object: 'chat.completion',
+        created: Math.floor(Date.now() / 1000),
+        model: body?.model ?? FALLBACK_AI_MODEL,
+        choices: [
+          {
+            index: 0,
+            message: { role: 'assistant', content },
+            finish_reason: 'stop',
+          },
+        ],
+        usage: { prompt_tokens: 0, completion_tokens: 0, total_tokens: 0 },
+      },
+      200,
+    );
+  } catch (_) {
+    return null;
+  }
+}
 
 function rateLimited(ip) {
   const now = Date.now();
