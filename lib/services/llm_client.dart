@@ -71,13 +71,16 @@ class LlmClient {
 
   /// Streaming variant for the free-conversation tab: sends `stream: true`,
   /// parses the SSE reply and hands each content delta to [onDelta] as it
-  /// arrives. Returns the full assembled reply.
+  /// arrives. Returns the full assembled reply. [extraSystem] is appended to
+  /// the system prompt — the chat tab uses it to inject the document context
+  /// so the model knows what the user is talking about.
   static Future<String> completeStream({
     required String baseUrl,
     required String model,
     String? apiKey,
     required List<({String role, String content})> messages,
     double temperature = 0.7,
+    String? extraSystem,
     required void Function(String delta) onDelta,
   }) async {
     final request = http.Request(
@@ -88,10 +91,13 @@ class LlmClient {
     if (apiKey != null && apiKey.isNotEmpty) {
       request.headers['Authorization'] = 'Bearer $apiKey';
     }
+    final system = extraSystem == null || extraSystem.isEmpty
+        ? systemPrompt
+        : '$systemPrompt\n\n$extraSystem';
     request.body = jsonEncode({
       'model': model,
       'messages': [
-        {'role': 'system', 'content': systemPrompt},
+        {'role': 'system', 'content': system},
         ...messages.map((m) => {'role': m.role, 'content': m.content}),
       ],
       'temperature': temperature,
