@@ -304,6 +304,14 @@ class _ViewerScreenState extends State<ViewerScreen> {
   late String _content = widget.content;
   late final _editController = TextEditingController(text: widget.content);
   final _editFocusNode = FocusNode();
+  // Syncs the editor's inner scroll position to the line-number gutter.
+  final _gutterController = ScrollController();
+  // The reader view's scroll position — used to jump back to the line that
+  // was being edited after leaving edit mode.
+  final _readerScrollController = ScrollController();
+  int _lineCount = 1;
+  // The markdown line to land on when the reader re-renders after editing.
+  int? _scrollToLine;
   bool _editing = false;
   bool _syncingToHackmd = false;
   // Resolved lazily on first sync/open-refresh (custom-aliased HackMD URLs
@@ -333,14 +341,31 @@ class _ViewerScreenState extends State<ViewerScreen> {
     ReaderPrefs.load().then((loaded) {
       if (mounted) setState(() => _prefs = loaded);
     });
+    _editController.addListener(_onEditChanged);
     _render(_content);
     _maybeRefreshFromCloud();
   }
 
+  /// Keeps the line-number gutter's count in sync with the edited text.
+  void _onEditChanged() {
+    final count = '\n'.allMatches(_editController.text).length + 1;
+    if (count != _lineCount) setState(() => _lineCount = count);
+  }
+
+  /// 1-based line number of [offset] within [text].
+  static int _lineOfOffset(String text, int offset) {
+    if (offset < 0) return 1;
+    final clamped = offset > text.length ? text.length : offset;
+    return '\n'.allMatches(text.substring(0, clamped)).length + 1;
+  }
+
   @override
   void dispose() {
+    _editController.removeListener(_onEditChanged);
     _editController.dispose();
     _editFocusNode.dispose();
+    _gutterController.dispose();
+    _readerScrollController.dispose();
     super.dispose();
   }
 
@@ -468,7 +493,22 @@ class _ViewerScreenState extends State<ViewerScreen> {
   void _render(String markdown) {
     _html = null;
     compute(convertMarkdownToHtml, markdown).then((html) {
-      if (mounted) setState(() => _html = html);
+      if (!mounted) return;
+      setState(() => _html = html);
+      // Land the reader on the line that was being edited. Rendered block
+      // heights vary (images, LaTeX, code), so this is an approximate
+      // position by line fraction — close enough to find your place.
+      final target = _scrollToLine;
+      if (target == null) return;
+      _scrollToLine = null;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted || !_readerScrollController.hasClients) return;
+        final total = '\n'.allMatches(markdown).length + 1;
+        final fraction = ((target.clamp(1, total) - 1) / total).clamp(0.0, 1.0);
+        _readerScrollController.jumpTo(
+          _readerScrollController.position.maxScrollExtent * fraction,
+        );
+      });
     });
   }
 
@@ -480,6 +520,7 @@ class _ViewerScreenState extends State<ViewerScreen> {
   /// and Android's scoped storage often can't do it reliably anyway.
   Future<void> _applyEdit() async {
     final edited = _editController.text;
+    _scrollToLine = _lineOfOffset(edited, _editController.selection.baseOffset);
     setState(() {
       _editing = false;
       _content = edited;
@@ -943,27 +984,79 @@ class _ViewerScreenState extends State<ViewerScreen> {
             ? Column(
                 children: [
                   Expanded(
-                    child: Container(
-                      color: c.bg,
-                      padding: const EdgeInsets.all(16),
-                      child: TextField(
-                        controller: _editController,
-                        focusNode: _editFocusNode,
-                        autofocus: true,
-                        maxLines: null,
-                        expands: true,
-                        textAlignVertical: TextAlignVertical.top,
-                        keyboardType: TextInputType.multiline,
-                        inputFormatters: [_MarkdownListContinuationFormatter()],
-                        style: mono.copyWith(
-                          color: c.text,
-                          fontSize: base - 1,
-                          height: 1.5,
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        // Line-number gutter. The numbers are sized with the
+                        // same strut metrics as the editor text so they align
+                        // line-by-line, and their vertical scroll position is
+                        // driven by the editor's own scrolling below. Wrapped
+                        // (overlong) lines count once — logical lines, not
+                        // visual rows.
+                        Container(
+                          width: 44,
+                          padding: const EdgeInsets.symmetric(vertical: 10),
+                          decoration: BoxDecoration(
+                            color: c.inset,
+                            border: Border(right: BorderSide(color: c.border)),
+                          ),
+                          child: SingleChildScrollView(
+                            controller: _gutterController,
+                            physics: const NeverScrollableScrollPhysics(),
+                            child: Text(
+                              List.generate(
+                                _lineCount,
+                                (i) => '${i + 1}',
+                              ).join('\n'),
+                              textAlign: TextAlign.center,
+                              style: mono.copyWith(
+                                color: c.mute,
+                                fontSize: base - 1,
+                                height: 1.5,
+                              ),
+                            ),
+                          ),
                         ),
-                        decoration: const InputDecoration(
-                          border: InputBorder.none,
+                        Expanded(
+                          child: NotificationListener<ScrollNotification>(
+                            onNotification: (n) {
+                              _gutterController.jumpTo(n.metrics.pixels);
+                              return false;
+                            },
+                            child: Container(
+                              color: c.bg,
+                              padding: const EdgeInsets.fromLTRB(8, 10, 12, 10),
+                              child: TextField(
+                                controller: _editController,
+                                focusNode: _editFocusNode,
+                                autofocus: true,
+                                maxLines: null,
+                                expands: true,
+                                textAlignVertical: TextAlignVertical.top,
+                                keyboardType: TextInputType.multiline,
+                                inputFormatters: [
+                                  _MarkdownListContinuationFormatter(),
+                                ],
+                                // A fixed line box lets the gutter numbers
+                                // stay pixel-aligned with the text lines.
+                                strutStyle: StrutStyle(
+                                  fontSize: base - 1,
+                                  height: 1.5,
+                                ),
+                                style: mono.copyWith(
+                                  color: c.text,
+                                  fontSize: base - 1,
+                                  height: 1.5,
+                                ),
+                                decoration: const InputDecoration(
+                                  border: InputBorder.none,
+                                  contentPadding: EdgeInsets.zero,
+                                ),
+                              ),
+                            ),
+                          ),
                         ),
-                      ),
+                      ],
                     ),
                   ),
                   _EditorToolbar(
@@ -986,6 +1079,7 @@ class _ViewerScreenState extends State<ViewerScreen> {
                 color: c.bg,
                 child: SelectionArea(
                   child: SingleChildScrollView(
+                    controller: _readerScrollController,
                     padding: const EdgeInsets.fromLTRB(20, 12, 20, 40),
                     child: HtmlWidget(
                       html,
