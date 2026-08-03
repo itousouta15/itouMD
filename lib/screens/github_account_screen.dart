@@ -3,6 +3,7 @@ import 'package:url_launcher/url_launcher.dart';
 
 import '../services/github_account.dart';
 import '../services/github_api.dart';
+import '../services/github_oauth.dart';
 import '../theme.dart';
 
 class GithubAccountScreen extends StatefulWidget {
@@ -71,6 +72,120 @@ class _GithubAccountScreenState extends State<GithubAccountScreen> {
     }
   }
 
+  Future<void> _loginWithAccount() async {
+    if (!GithubOAuth.isConfigured) return;
+    setState(() {
+      _busy = true;
+      _error = null;
+    });
+    try {
+      final session = await GithubOAuth.startDeviceFlow();
+      if (!mounted) return;
+      setState(() => _busy = false);
+
+      final token = await _showDeviceCodeDialog(session);
+      if (token == null) return; // cancelled
+
+      final login = await GithubApi.getAuthenticatedUser(token);
+      await GithubAccount.setToken(token);
+      _tokenController.text = token;
+      if (!mounted) return;
+      setState(() => _connectedUser = login);
+    } on GithubOAuthException catch (e) {
+      if (mounted) setState(() => _error = e.message);
+    } on GithubApiException catch (e) {
+      if (mounted) setState(() => _error = e.message);
+    } catch (_) {
+      if (mounted) setState(() => _error = '登入失敗，再試一次看看 (´;ω;`)');
+    } finally {
+      if (mounted && _busy) setState(() => _busy = false);
+    }
+  }
+
+  /// Shows the device code in a dialog, launches the verification page, and
+  /// polls until the user authorizes. Returns the access token, or null if
+  /// the dialog was dismissed.
+  Future<String?> _showDeviceCodeDialog(GithubOAuthSession session) async {
+    var cancelled = false;
+    return showDialog<String>(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) {
+        final c = ItouColorsExt.of(ctx);
+        return AlertDialog(
+          backgroundColor: c.panel,
+          title: const Text('使用 GitHub 帳號登入'),
+          content: SizedBox(
+            width: 320,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  '在 GitHub 上輸入這個代碼完成授權：',
+                  style: TextStyle(color: c.dim, fontSize: 13),
+                ),
+                const SizedBox(height: 14),
+                SelectableText(
+                  session.userCode,
+                  style: TextStyle(
+                    fontFamily: 'monospace',
+                    fontSize: 34,
+                    letterSpacing: 6,
+                    fontWeight: FontWeight.w700,
+                    color: c.text,
+                  ),
+                ),
+                const SizedBox(height: 14),
+                SizedBox(
+                  width: double.infinity,
+                  child: ElevatedButton.icon(
+                    onPressed: () => launchUrl(
+                      Uri.parse(session.verificationUri),
+                      mode: LaunchMode.externalApplication,
+                    ),
+                    icon: const Icon(Icons.open_in_browser, size: 18),
+                    label: const Text('開啟 GitHub 授權頁面'),
+                  ),
+                ),
+                const SizedBox(height: 14),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    SizedBox(
+                      width: 14,
+                      height: 14,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        color: c.blue,
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    Text(
+                      '等待授權…',
+                      style: TextStyle(color: c.mute, fontSize: 12),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () {
+                cancelled = true;
+                Navigator.of(ctx).pop();
+              },
+              child: const Text('取消'),
+            ),
+          ],
+        );
+      },
+    ).then((_) async {
+      if (cancelled) return null;
+      return GithubOAuth.pollForToken(session, isCancelled: () => cancelled);
+    });
+  }
+
   Future<void> _disconnect() async {
     await GithubAccount.clearToken();
     _tokenController.clear();
@@ -119,14 +234,39 @@ class _GithubAccountScreenState extends State<GithubAccountScreen> {
               ),
               const SizedBox(height: 16),
             ],
-            Text(
-              'Personal Access Token',
-              style: TextStyle(
-                color: c.text,
-                fontWeight: FontWeight.w600,
-                fontSize: 13,
+            if (GithubOAuth.isConfigured) ...[
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton.icon(
+                  onPressed: _busy ? null : _loginWithAccount,
+                  icon: const Icon(Icons.login, size: 18),
+                  label: const Text('使用 GitHub 帳號登入'),
+                ),
               ),
-            ),
+              const SizedBox(height: 8),
+              Text(
+                '推薦：用帳號登入，不需另外建立 Token。',
+                style: TextStyle(color: c.mute, fontSize: 12),
+              ),
+              const SizedBox(height: 24),
+              Text(
+                '進階：手動 Personal Access Token',
+                style: TextStyle(
+                  color: c.text,
+                  fontWeight: FontWeight.w600,
+                  fontSize: 13,
+                ),
+              ),
+              const SizedBox(height: 6),
+            ] else
+              Text(
+                'Personal Access Token',
+                style: TextStyle(
+                  color: c.text,
+                  fontWeight: FontWeight.w600,
+                  fontSize: 13,
+                ),
+              ),
             const SizedBox(height: 6),
             TextField(
               controller: _tokenController,
