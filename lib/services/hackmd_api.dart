@@ -254,6 +254,69 @@ class HackmdApi {
     return _patchNote('$_base/teams/$teamPath/notes/$noteId', token, content);
   }
 
+  /// Creates a personal note on the official HackMD API (`POST /notes`).
+  /// Returns the created note; the UI falls back to a local draft on any
+  /// failure, since this endpoint may reject some tokens/plans.
+  static Future<HackmdNote> createNote(
+    String token,
+    String content, {
+    String readPermission = 'owner',
+    String writePermission = 'owner',
+  }) async {
+    final http.Response res;
+    try {
+      res = await http
+          .post(
+            Uri.parse('$_base/notes'),
+            headers: _headers(token),
+            body: jsonEncode({
+              'content': content,
+              'readPermission': readPermission,
+              'writePermission': writePermission,
+            }),
+          )
+          .timeout(const Duration(seconds: 20));
+    } catch (_) {
+      throw HackmdApiException('連不到 HackMD，檢查網路連線 (´;ω;`)');
+    }
+    if (res.statusCode != 200 && res.statusCode != 201) {
+      throw HackmdApiException(_errorMessage(res), res.statusCode);
+    }
+    final json = jsonDecode(utf8.decode(res.bodyBytes)) as Map<String, dynamic>;
+    return HackmdNote.fromJson(json);
+  }
+
+  /// Creates a note inside a team workspace (`POST /teams/{teamPath}/notes`).
+  static Future<HackmdNote> createTeamNote(
+    String token,
+    String teamPath,
+    String content, {
+    String readPermission = 'owner',
+    String writePermission = 'owner',
+  }) async {
+    final http.Response res;
+    try {
+      res = await http
+          .post(
+            Uri.parse('$_base/teams/$teamPath/notes'),
+            headers: _headers(token),
+            body: jsonEncode({
+              'content': content,
+              'readPermission': readPermission,
+              'writePermission': writePermission,
+            }),
+          )
+          .timeout(const Duration(seconds: 20));
+    } catch (_) {
+      throw HackmdApiException('連不到 HackMD，檢查網路連線 (´;ω;`)');
+    }
+    if (res.statusCode != 200 && res.statusCode != 201) {
+      throw HackmdApiException(_errorMessage(res), res.statusCode);
+    }
+    final json = jsonDecode(utf8.decode(res.bodyBytes)) as Map<String, dynamic>;
+    return HackmdNote.fromJson(json);
+  }
+
   /// Resolves the API `noteId` (and team path, when relevant) for a
   /// `hackmd.io` note URL. A canonical URL (`hackmd.io/<id>`) already has
   /// the id as its only path segment; a custom-aliased one
