@@ -1129,7 +1129,7 @@ class _ViewerScreenState extends State<ViewerScreen> {
           if (_editing)
             IconButton(
               tooltip: 'AI 助理',
-              icon: const Icon(Icons.auto_awesome, color: Colors.amber),
+              icon: Icon(Icons.auto_awesome, color: c.blue),
               onPressed: _openAiAssistant,
             ),
           IconButton(
@@ -1281,7 +1281,7 @@ class _ViewerScreenState extends State<ViewerScreen> {
                                   items.insert(
                                     0,
                                     ContextMenuButtonItem(
-                                      label: '✨ AI 助理',
+                                      label: 'AI 助理',
                                       onPressed: () {
                                         editableTextState.hideToolbar();
                                         _openAiAssistant();
@@ -1830,7 +1830,7 @@ class _AiAssistantSheetState extends State<_AiAssistantSheet> {
               Row(
                 children: [
                   Expanded(
-                    child: OutlinedButton(
+                    child: ElevatedButton(
                       onPressed: () => Navigator.of(context).pop(),
                       child: const Text('取消'),
                     ),
@@ -1838,6 +1838,10 @@ class _AiAssistantSheetState extends State<_AiAssistantSheet> {
                   const SizedBox(width: 10),
                   Expanded(
                     child: ElevatedButton(
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: c.blue,
+                        foregroundColor: Colors.white,
+                      ),
                       onPressed: _apply,
                       child: const Text('套用'),
                     ),
