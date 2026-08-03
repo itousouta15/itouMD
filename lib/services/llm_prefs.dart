@@ -14,7 +14,7 @@ class LlmPrefs {
   /// The app's own proxy endpoint (Cloudflare Worker) used when the user
   /// hasn't configured their own API key. Rate-limited per IP.
   static const builtinBaseUrl = 'https://llm.itousouta.me';
-  static const builtinModel = 'deepseek-chat';
+  static const builtinModel = 'deepseek-v4-flash-free';
   static const defaultBaseUrl = 'https://api.openai.com/v1';
   static const defaultModel = 'gpt-4o-mini';
 
