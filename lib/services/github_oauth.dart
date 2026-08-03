@@ -35,9 +35,13 @@ class GithubOAuthSession {
 /// secret; the access token it yields is used exactly like a PAT
 /// (`Authorization: Bearer`).
 class GithubOAuth {
-  /// Injected at build time with `--dart-define=GITHUB_CLIENT_ID=...`.
-  /// Empty (default) hides the OAuth button; only the manual PAT path shows.
-  static const clientId = String.fromEnvironment('GITHUB_CLIENT_ID');
+  /// The app's registered GitHub OAuth App client id (public by design —
+  /// device flow needs no secret). Overridable at build time with
+  /// `--dart-define=GITHUB_CLIENT_ID=...`.
+  static const clientId = String.fromEnvironment(
+    'GITHUB_CLIENT_ID',
+    defaultValue: 'Ov23liM02CBR2iKAK387',
+  );
 
   static bool get isConfigured => clientId.isNotEmpty;
 
