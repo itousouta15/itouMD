@@ -4,6 +4,8 @@ import 'package:url_launcher/url_launcher.dart';
 
 import '../services/hackmd_account.dart';
 import '../services/hackmd_api.dart';
+import '../services/llm_client.dart';
+import '../services/llm_prefs.dart';
 import '../services/note_cache.dart';
 import '../services/reader_prefs.dart';
 import '../services/recent_docs.dart';
@@ -49,6 +51,15 @@ class _SettingsScreenState extends State<SettingsScreen> {
   bool _autoRefresh = true;
   ConflictResolution _conflictResolution = ConflictResolution.ask;
   String _appVersion = '';
+  bool _llmUseBuiltin = true;
+  String _llmBaseUrl = '';
+  String _llmModel = '';
+  final _llmBaseUrlController = TextEditingController();
+  final _llmModelController = TextEditingController();
+  final _llmKeyController = TextEditingController();
+  bool _llmTesting = false;
+  String? _llmTestResult;
+  bool _llmTestOk = false;
   // Live mirrors of the app-level state. The settings screen is a pushed
   // route, so its `widget` is frozen at push time — if we read the
   // customization/theme/ui-scale straight off `widget`, tapping a swatch
@@ -79,8 +90,17 @@ class _SettingsScreenState extends State<SettingsScreen> {
     _loadAll();
   }
 
+  @override
+  void dispose() {
+    _llmBaseUrlController.dispose();
+    _llmModelController.dispose();
+    _llmKeyController.dispose();
+    super.dispose();
+  }
+
   Future<void> _loadAll() async {
     _loadAccount();
+    _loadLlmPrefs();
     final reader = await ReaderPrefs.load();
     final autoRefresh = await SyncPrefs.autoRefreshOnOpen;
     final conflict = await SyncPrefs.conflictResolution;
@@ -130,6 +150,104 @@ class _SettingsScreenState extends State<SettingsScreen> {
       context,
     ).push(MaterialPageRoute(builder: (_) => const HackmdAccountScreen()));
     _loadAccount();
+  }
+
+  Future<void> _loadLlmPrefs() async {
+    final useBuiltin = await LlmPrefs.useBuiltin;
+    final baseUrl = await LlmPrefs.baseUrl;
+    final model = await LlmPrefs.model;
+    final apiKey = await LlmPrefs.apiKey;
+    if (!mounted) return;
+    setState(() {
+      _llmUseBuiltin = useBuiltin;
+      _llmBaseUrl = baseUrl ?? '';
+      _llmModel = model ?? '';
+      _llmBaseUrlController.text = baseUrl ?? '';
+      _llmModelController.text = model ?? '';
+      _llmKeyController.text = apiKey ?? '';
+    });
+  }
+
+  void _setLlmUseBuiltin(bool value) {
+    setState(() => _llmUseBuiltin = value);
+    LlmPrefs.setUseBuiltin(value);
+    if (value) {
+      // Back to the built-in defaults — clear the stale custom values.
+      setState(() {
+        _llmBaseUrl = LlmPrefs.builtinBaseUrl;
+        _llmModel = LlmPrefs.builtinModel;
+        _llmBaseUrlController.text = LlmPrefs.builtinBaseUrl;
+        _llmModelController.text = LlmPrefs.builtinModel;
+      });
+    }
+  }
+
+  void _saveLlmBaseUrl(String value) {
+    setState(() => _llmBaseUrl = value.trim());
+    LlmPrefs.setBaseUrl(value);
+  }
+
+  void _saveLlmModel(String value) {
+    setState(() => _llmModel = value.trim());
+    LlmPrefs.setModel(value);
+  }
+
+  Future<void> _testLlm() async {
+    final baseUrl = _llmBaseUrl.trim();
+    final model = _llmModel.trim();
+    final apiKey = _llmUseBuiltin ? null : _llmKeyController.text.trim();
+    if (baseUrl.isEmpty || model.isEmpty) {
+      setState(() {
+        _llmTestOk = false;
+        _llmTestResult = '請先填 Base URL 與 Model';
+      });
+      return;
+    }
+    if (!_llmUseBuiltin && (apiKey == null || apiKey.isEmpty)) {
+      setState(() {
+        _llmTestOk = false;
+        _llmTestResult = '自訂模式需要 API Key';
+      });
+      return;
+    }
+    setState(() {
+      _llmTesting = true;
+      _llmTestResult = null;
+    });
+    try {
+      final reply = await LlmClient.complete(
+        baseUrl: baseUrl,
+        model: model,
+        apiKey: apiKey,
+        userPrompt: '請只回覆「OK」',
+        temperature: 0,
+      );
+      if (mounted) {
+        setState(() {
+          _llmTestOk = true;
+          _llmTestResult = '連線成功（回應：$reply）';
+        });
+        if (!_llmUseBuiltin && apiKey != null) {
+          await LlmPrefs.setApiKey(apiKey);
+        }
+      }
+    } on LlmException catch (e) {
+      if (mounted) {
+        setState(() {
+          _llmTestOk = false;
+          _llmTestResult = e.message;
+        });
+      }
+    } catch (_) {
+      if (mounted) {
+        setState(() {
+          _llmTestOk = false;
+          _llmTestResult = '連線失敗，再試一次看看 (´;ω;`)';
+        });
+      }
+    } finally {
+      if (mounted) setState(() => _llmTesting = false);
+    }
   }
 
   void _updateReaderPrefs(ReaderPrefs next) {
@@ -423,6 +541,103 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 labelColor: _user != null ? c.text : c.dim,
                 trailing: Icon(Icons.chevron_right, size: 18, color: c.mute),
                 onTap: _openAccount,
+              ),
+            ],
+          ),
+          const SizedBox(height: 24),
+          const SectionLabel('AI 助理'),
+          const SizedBox(height: 8),
+          _Panel(
+            children: [
+              _SettingRow(
+                icon: Icons.auto_awesome_outlined,
+                label: '使用內建免費額度',
+                trailing: Switch(
+                  value: _llmUseBuiltin,
+                  onChanged: _setLlmUseBuiltin,
+                  activeThumbColor: c.blue,
+                ),
+                onTap: () => _setLlmUseBuiltin(!_llmUseBuiltin),
+              ),
+              Divider(height: 1, thickness: 1, color: c.border),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(14, 12, 14, 14),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      _llmUseBuiltin
+                          ? '編輯模式使用內建 AI（DeepSeek 最便宜模型，每日配額有限）。'
+                          : '用自己的 API Key 走 OpenAI 相容端點（不受配額限制）。',
+                      style: TextStyle(color: c.dim, fontSize: 12),
+                    ),
+                    const SizedBox(height: 12),
+                    TextField(
+                      controller: _llmBaseUrlController,
+                      style: TextStyle(color: c.text, fontSize: 13),
+                      enabled: !_llmUseBuiltin,
+                      decoration: InputDecoration(
+                        labelText: 'Base URL',
+                        hintText: LlmPrefs.builtinBaseUrl,
+                      ),
+                      onChanged: (v) => setState(() => _llmBaseUrl = v.trim()),
+                      onSubmitted: _saveLlmBaseUrl,
+                    ),
+                    const SizedBox(height: 10),
+                    TextField(
+                      controller: _llmModelController,
+                      style: TextStyle(color: c.text, fontSize: 13),
+                      enabled: !_llmUseBuiltin,
+                      decoration: InputDecoration(
+                        labelText: 'Model',
+                        hintText: LlmPrefs.builtinModel,
+                      ),
+                      onChanged: (v) => setState(() => _llmModel = v.trim()),
+                      onSubmitted: _saveLlmModel,
+                    ),
+                    const SizedBox(height: 10),
+                    TextField(
+                      controller: _llmKeyController,
+                      obscureText: true,
+                      style: TextStyle(color: c.text, fontSize: 13),
+                      enabled: !_llmUseBuiltin,
+                      decoration: const InputDecoration(
+                        labelText: 'API Key',
+                        hintText: 'sk-...',
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: ElevatedButton(
+                            onPressed: _llmTesting ? null : _testLlm,
+                            child: _llmTesting
+                                ? const SizedBox(
+                                    height: 16,
+                                    width: 16,
+                                    child: CircularProgressIndicator(
+                                      strokeWidth: 2,
+                                    ),
+                                  )
+                                : const Text('測試連線'),
+                          ),
+                        ),
+                      ],
+                    ),
+                    if (_llmTestResult != null) ...[
+                      const SizedBox(height: 10),
+                      Text(
+                        _llmTestResult!,
+                        style: TextStyle(
+                          color: _llmTestOk ? c.blue : const Color(0xFFE0777A),
+                          fontSize: 12,
+                          height: 1.5,
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
               ),
             ],
           ),
