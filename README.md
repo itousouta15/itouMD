@@ -25,11 +25,11 @@
 - **程式碼區塊**：標了語言自動語法高亮，附**行號**與**一鍵複製**按鈕。
 - **LaTeX 數學公式**：支援 inline `$...$` 與 display `$$...$$`。
 - **圖片**：點開全螢幕放大，可雙指縮放（SVG badge 也能正確渲染）。
-- **本機編輯器**：內建格式工具列（粗體、斜體、標題、清單、引用、連結、程式碼區塊），按 Enter 自動延續清單項目。
-- **多種來源**：貼上文字、選擇本機檔案（`.md`／`.markdown`／`.mdx`／`.txt`）、從 GitHub／Gist／HackMD 網址擷取內容。
-- **閱讀偏好**：字體（8 種）、字級、文字顏色（9 種預設色＋**自訂調色盤**），設定自動保存。
+- **本機編輯器**：內建格式工具列（粗體、斜體、標題、清單、引用、連結、程式碼區塊），按 Enter 自動延續清單項目；左側**行號欄**與文字同步捲動，完成編輯後自動捲回剛才編輯的那一行。
+- **多種來源**：**新建文件**（輸入標題直接開始寫，有連結 HackMD 時可一併建立雲端筆記）、貼上文字、選擇本機檔案（`.md`／`.markdown`／`.mdx`／`.txt`）、從 GitHub／Gist／HackMD 網址擷取內容。
+- **閱讀偏好**：字體（8 種＋**匯入自訂字型**）、字級、文字顏色（9 種預設色＋**自訂調色盤**），設定自動保存。
 - **介面字級**：標準／大／特大三檔，App 介面文字可整體放大；閱讀內容的字級獨立控制不受影響。
-- **深淺色主題**：平滑動畫過場。
+- **深淺色主題**：**跟隨系統**（或手動選淺色／深色）＋平滑動畫過場；**主題顏色**可分別為淺色與深色主題自訂主色與背景色（背景可選「自動」——跟隨主色衍生的同色系底色——或自訂，並自動衍生面板色系）。
 - **另存新檔**：編輯完可另存成 `.md` 檔案到裝置任意位置。
 
 ### HackMD 雲端
@@ -61,35 +61,39 @@
 
 ```
 lib/
-├── main.dart                          應用入口：Sentry、主題、介面字級、首頁／精靈介紹
-├── theme.dart                         自訂應用主題與顏色樣式
+├── main.dart                          應用入口：Sentry、主題（跟隨系統／自訂主色背景）、介面字級、首頁／精靈介紹
+├── theme.dart                         自訂應用主題與顏色樣式（主色／背景衍生邏輯）
 ├── screens/
-│   ├── home_screen.dart               首頁：貼上、選檔、網址抓取、最近開啟、啟動靜默檢查更新
+│   ├── home_screen.dart               首頁：新建、貼上、選檔、網址抓取、最近開啟、啟動靜默檢查更新
 │   ├── onboarding_screen.dart         首次啟動的精靈式介紹（4 頁引導）
-│   ├── viewer_screen.dart             檢視／編輯：渲染、工具列、同步、衝突合併、復原、離線
+│   ├── viewer_screen.dart             檢視／編輯：渲染、行號編輯器、工具列、同步、衝突合併、復原、離線
 │   ├── conflict_screen.dart           衝突合併畫面：差異檢視、逐項選擇、合併預覽
 │   ├── hackmd_notes_screen.dart       瀏覽個人與團隊筆記（可收合分類、離線快取）
 │   ├── hackmd_account_screen.dart     HackMD 帳號（API Token）設定
 │   ├── sync_history_screen.dart       同步紀錄列表
-│   └── settings_screen.dart           設定頁：外觀、閱讀偏好、同步、帳號、資料、更多、關於
+│   └── settings_screen.dart           設定頁：外觀（主題／主題顏色）、閱讀偏好、同步、帳號、資料、更多、關於
 ├── services/
 │   ├── markdown_renderer.dart         Markdown → HTML 轉換管線（isolate 執行）
 │   ├── markdown_source.dart           遠端 Markdown 擷取與 URL 正規化
 │   ├── markdown_editor_actions.dart   編輯器工具列／清單自動延續的純邏輯
 │   ├── markdown_diff.dart             Myers diff 與三方合併（純 Dart、可單測）
 │   ├── hackmd_syntax.dart             HackMD 容器語法、`[TOC]` 展開
-│   ├── hackmd_api.dart                HackMD REST API 客戶端（含團隊端點）
+│   ├── hackmd_api.dart                HackMD REST API 客戶端（含團隊端點、建立筆記）
 │   ├── hackmd_account.dart            HackMD API Token 安全儲存
 │   ├── note_cache.dart                離線快取（筆記內容與瀏覽清單）
 │   ├── sync_history.dart              同步紀錄與復原槽（跨 session）
 │   ├── sync_prefs.dart                同步偏好（自動更新開關、衝突處理預設）
 │   ├── ui_prefs.dart                  介面字級設定
+│   ├── theme_prefs.dart               主題自訂設定（淺／深主色與背景）
+│   ├── custom_fonts.dart              匯入字型：檔案複製、FontLoader 註冊、啟動重放
 │   ├── update_checker.dart            GitHub Releases 更新檢查與下載安裝
 │   ├── latex_preprocessor.dart        保護 LaTeX 公式避免被 Markdown 解析破壞
-│   ├── reader_prefs.dart              保存讀者偏好設定（含自訂顏色）
+│   ├── reader_prefs.dart              保存讀者偏好設定（含自訂顏色、匯入字型選項）
 │   └── recent_docs.dart               儲存與管理最近開啟紀錄
 └── widgets/
     ├── loader_ring.dart               載入動畫元件與 SectionLabel
+    ├── hsv_color_picker.dart          共用 HSV 自訂選色器（主題主色／背景、閱讀文字顏色）
+    ├── reader_font_picker.dart        共用字體選單（內建字型＋匯入字型入口）
     └── update_dialog.dart             更新通知對話框（下載進度）
 ```
 
@@ -215,9 +219,9 @@ flutter build ios --release
 
 ### 基本操作
 
-2. 首頁可直接「貼上文字」、選擇本機檔案，或貼入網址從 GitHub／Gist／HackMD 擷取內容。
-3. 進入檢視頁面後，點右上角編輯圖示切換到編輯模式，畫面下方會出現格式工具列。
-4. 編輯完成後點「完成編輯」套用並重新渲染預覽；點「另存新檔」可存成 `.md` 檔案。
+2. 首頁點「建立新文件」輸入標題即可開始寫；也可直接「貼上文字」、選擇本機檔案，或貼入網址從 GitHub／Gist／HackMD 擷取內容。
+3. 進入檢視頁面後，點右上角編輯圖示切換到編輯模式，左側會出現行號欄，畫面下方會出現格式工具列。
+4. 編輯完成後點「完成編輯」套用並重新渲染預覽，預覽會自動捲回剛才編輯的那一行；點「另存新檔」可存成 `.md` 檔案。
 5. 點程式碼區塊右上角圖示可複製整段程式碼；點文件中的圖片可全螢幕放大。
 
 ### HackMD 同步與衝突合併
@@ -234,8 +238,8 @@ flutter build ios --release
 
 ### 閱讀偏好與外觀
 
-12. 檢視頁面點「顯示設定」可即時調整字體、字級、文字顏色（含自訂調色盤）。
-13. 「設定」頁可調整介面字級（標準／大／特大）、深淺色主題、清除最近開啟紀錄與離線快取。
+12. 檢視頁面點「顯示設定」可即時調整字體（含**匯入自訂字型**，支援 `.ttf`／`.otf`）、字級、文字顏色（含自訂調色盤）。
+13. 「設定 → 外觀」可調整主題（**跟隨系統**／淺色／深色）與**主題顏色**——淺色、深色主題可分別設定主色（按鈕、連結等強調色）與背景色（「自動」會跟隨主色衍生同色系底色，或自訂；面板色系自動衍生、文字對比隨背景亮度調整）；介面字級（標準／大／特大）也在這裡。資料管理（清除最近開啟紀錄與離線快取）同在設定頁。
 
 ### App 內更新
 
@@ -252,6 +256,9 @@ flutter build ios --release
 - 更新檢查以 GitHub `releases/latest` 為準，僅在遠端版本號嚴格大於本機時才提示。
 - Sentry DSN 透過 `--dart-define=SENTRY_DSN=...` 注入，未帶則完全停用；環境標籤可用 `SENTRY_ENV`。
 - 介面字級用全域 `TextScaler` 套用，閱讀內容與編輯器刻意排除（各自有獨立字級控制）。
+- 主題自訂：主色（`withAccent`）與背景色（`withBackground`）在 `theme.dart` 內以 HSL 偏移衍生搭配色系——背景色依亮度自動切換文字／邊框 token，保證自訂顏色下的可讀性；設定儲存於 `theme_prefs.dart`。
+- 匯入字型用 Flutter 的 `FontLoader`（process 全域註冊）：啟動時由 `custom_fonts.dart` 重放已存檔案，選中後跨重啟仍生效；字型檔案複製到 App documents 目錄。
+- 「新建文件」在已連結 HackMD 帳號時會先嘗試官方 API 的 `POST /notes` 建立雲端筆記（該端點可能拒絕部分 Token／方案，失敗會自動回退為本地草稿並提示）。
 - 更多疑難排解（Windows 路徑限制、模擬器黑屏問題等）請見 [`DEV_NOTES.md`](DEV_NOTES.md)。
 
 ## 貢獻
