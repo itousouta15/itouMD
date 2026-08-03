@@ -23,6 +23,7 @@ import '../services/hackmd_account.dart';
 import '../services/hackmd_api.dart';
 import '../services/llm_client.dart';
 import '../services/llm_prefs.dart';
+import '../services/markdown_diff.dart';
 import '../services/markdown_editor_actions.dart';
 import '../services/markdown_renderer.dart';
 import '../services/note_cache.dart';
@@ -32,6 +33,7 @@ import '../services/sync_history.dart';
 import '../services/sync_prefs.dart';
 import '../theme.dart';
 import '../widgets/color_swatch_row.dart';
+import '../widgets/diff_view.dart';
 import '../widgets/hsv_color_picker.dart';
 import '../widgets/loader_ring.dart';
 import '../widgets/reader_font_picker.dart';
@@ -1124,6 +1126,12 @@ class _ViewerScreenState extends State<ViewerScreen> {
             icon: Icon(_editing ? Icons.done_outlined : Icons.edit_outlined),
             onPressed: _editing ? _applyEdit : _enterEdit,
           ),
+          if (_editing)
+            IconButton(
+              tooltip: 'AI 助理',
+              icon: const Icon(Icons.auto_awesome, color: Colors.amber),
+              onPressed: _openAiAssistant,
+            ),
           IconButton(
             tooltip: '另存新檔',
             icon: const Icon(Icons.save_alt_outlined),
@@ -1267,6 +1275,25 @@ class _ViewerScreenState extends State<ViewerScreen> {
                                   border: InputBorder.none,
                                   contentPadding: EdgeInsets.zero,
                                 ),
+                                contextMenuBuilder: (context, editableTextState) {
+                                  final items =
+                                      editableTextState.contextMenuButtonItems;
+                                  items.insert(
+                                    0,
+                                    ContextMenuButtonItem(
+                                      label: '✨ AI 助理',
+                                      onPressed: () {
+                                        editableTextState.hideToolbar();
+                                        _openAiAssistant();
+                                      },
+                                    ),
+                                  );
+                                  return AdaptiveTextSelectionToolbar.buttonItems(
+                                    anchors:
+                                        editableTextState.contextMenuAnchors,
+                                    buttonItems: items,
+                                  );
+                                },
                               ),
                             ),
                           ),
@@ -1622,6 +1649,7 @@ class _AiAssistantSheet extends StatefulWidget {
 
 class _AiAssistantSheetState extends State<_AiAssistantSheet> {
   bool _busy = false;
+  bool _showDiff = true;
   String? _error;
   String? _result;
 
@@ -1634,6 +1662,16 @@ class _AiAssistantSheetState extends State<_AiAssistantSheet> {
   TextRange get _targetRange => widget.hasSelection
       ? TextRange(start: widget.selection.start, end: widget.selection.end)
       : TextRange(start: 0, end: widget.docText.length);
+
+  /// Line-level changes the AI made to [_targetText].
+  List<DiffHunk> get _diffHunks {
+    final result = _result;
+    if (result == null) return const [];
+    return diffTexts(_targetText, result);
+  }
+
+  int get _addedCount => diffStats(_diffHunks).$1;
+  int get _removedCount => diffStats(_diffHunks).$2;
 
   Future<void> _run(String instruction) async {
     setState(() {
@@ -1746,6 +1784,23 @@ class _AiAssistantSheetState extends State<_AiAssistantSheet> {
             ],
             if (_result != null) ...[
               const SizedBox(height: 12),
+              Row(
+                children: [
+                  Text(
+                    '新增 $_addedCount 行・刪除 $_removedCount 行',
+                    style: TextStyle(color: c.dim, fontSize: 11.5),
+                  ),
+                  const Spacer(),
+                  GestureDetector(
+                    onTap: () => setState(() => _showDiff = !_showDiff),
+                    child: Text(
+                      _showDiff ? '顯示原始文字' : '顯示差異',
+                      style: TextStyle(color: c.blue, fontSize: 12),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 6),
               Container(
                 constraints: const BoxConstraints(maxHeight: 220),
                 padding: const EdgeInsets.all(10),
@@ -1754,14 +1809,21 @@ class _AiAssistantSheetState extends State<_AiAssistantSheet> {
                   border: Border.all(color: c.border),
                 ),
                 child: SingleChildScrollView(
-                  child: Text(
-                    _result!,
-                    style: TextStyle(
-                      color: c.text,
-                      fontSize: 12.5,
-                      height: 1.5,
-                    ),
-                  ),
+                  child: _showDiff
+                      ? (_diffHunks.isEmpty
+                            ? Text(
+                                '沒有變更',
+                                style: TextStyle(color: c.mute, fontSize: 12),
+                              )
+                            : DiffView(hunks: _diffHunks, c: c))
+                      : Text(
+                          _result!,
+                          style: TextStyle(
+                            color: c.text,
+                            fontSize: 12.5,
+                            height: 1.5,
+                          ),
+                        ),
                 ),
               ),
               const SizedBox(height: 12),
@@ -1839,6 +1901,34 @@ class _EditorToolbar extends StatelessWidget {
     );
   }
 
+  /// The AI assistant button — visually set apart from the plain format
+  /// buttons so it reads as a distinct feature, not another toggle.
+  Widget _aiBtn() {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Container(width: 1, height: 24, color: c.border),
+        const SizedBox(width: 6),
+        Tooltip(
+          message: 'AI 助理（潤飾／翻譯／改寫）',
+          child: Material(
+            color: c.blue,
+            borderRadius: BorderRadius.circular(8),
+            child: InkWell(
+              onTap: onAi,
+              borderRadius: BorderRadius.circular(8),
+              child: const SizedBox(
+                width: 40,
+                height: 40,
+                child: Icon(Icons.auto_awesome, size: 20, color: Colors.white),
+              ),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Container(
@@ -1865,7 +1955,7 @@ class _EditorToolbar extends StatelessWidget {
               _btn(Icons.format_list_numbered, '編號清單', onNumberedList),
               _btn(Icons.check_box_outlined, '待辦清單', onTaskList),
               _btn(Icons.link, '連結', onLink),
-              _btn(Icons.auto_awesome, 'AI 助理', onAi),
+              _aiBtn(),
             ],
           ),
         ),
