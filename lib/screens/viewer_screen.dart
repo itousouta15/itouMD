@@ -950,7 +950,7 @@ class _ViewerScreenState extends State<ViewerScreen> {
             icon: const Icon(Icons.save_alt_outlined),
             onPressed: () => _saveAs(context),
           ),
-          if (_isHackmdDoc)
+          if (_isHackmdDoc) ...[
             IconButton(
               tooltip: '同步到 HackMD',
               icon: _syncingToHackmd
@@ -962,18 +962,42 @@ class _ViewerScreenState extends State<ViewerScreen> {
                   : const Icon(Icons.cloud_upload_outlined),
               onPressed: _syncingToHackmd ? null : () => _syncToHackmd(context),
             ),
-          if (!_editing) ...[
             IconButton(
-              tooltip: '顯示設定',
-              icon: const Icon(Icons.text_fields_outlined),
-              onPressed: () => _openReaderSettings(context),
-            ),
-            IconButton(
-              tooltip: '複製原始碼',
-              icon: const Icon(Icons.copy_all_outlined),
-              onPressed: () => _copyRaw(context),
+              tooltip: '在 HackMD 開啟',
+              icon: const Icon(Icons.open_in_new),
+              onPressed: () => launchUrl(Uri.parse(widget.sourceRef!)),
             ),
           ],
+          if (!_editing)
+            PopupMenuButton<String>(
+              tooltip: '更多',
+              icon: const Icon(Icons.more_vert),
+              color: c.panel,
+              onSelected: (value) {
+                switch (value) {
+                  case 'settings':
+                    _openReaderSettings(context);
+                  case 'copy':
+                    _copyRaw(context);
+                }
+              },
+              itemBuilder: (menuContext) => [
+                PopupMenuItem(
+                  value: 'settings',
+                  child: Text(
+                    '顯示設定',
+                    style: TextStyle(color: c.text, fontSize: 13),
+                  ),
+                ),
+                PopupMenuItem(
+                  value: 'copy',
+                  child: Text(
+                    '複製原始碼',
+                    style: TextStyle(color: c.text, fontSize: 13),
+                  ),
+                ),
+              ],
+            ),
         ],
       ),
       // The reader content and editor keep their own explicit font sizes —
