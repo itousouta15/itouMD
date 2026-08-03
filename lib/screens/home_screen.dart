@@ -205,10 +205,84 @@ class _HomeScreenState extends State<HomeScreen> {
     }
   }
 
+  /// Asks for a title, then starts a fresh document. When a HackMD account
+  /// is linked, tries to create the note on the cloud first (the official
+  /// API may reject some tokens; any failure falls back to a local draft).
+  Future<void> _createNewDoc() async {
+    final titleController = TextEditingController(text: '未命名');
+    final title = await showDialog<String>(
+      context: context,
+      builder: (ctx) {
+        final c = ItouColorsExt.of(ctx);
+        return AlertDialog(
+          title: const Text('新建文件'),
+          content: TextField(
+            controller: titleController,
+            autofocus: true,
+            maxLength: 40,
+            style: TextStyle(color: c.text, fontSize: 14),
+            decoration: const InputDecoration(
+              hintText: '輸入標題...',
+              border: InputBorder.none,
+            ),
+            onSubmitted: (v) => Navigator.of(ctx).pop(v),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(ctx).pop(),
+              child: const Text('取消'),
+            ),
+            TextButton(
+              onPressed: () => Navigator.of(ctx).pop(titleController.text),
+              child: const Text('建立'),
+            ),
+          ],
+        );
+      },
+    );
+    if (!mounted || title == null) return;
+    final safeTitle = title.trim();
+    if (safeTitle.isEmpty) return;
+    final name = safeTitle.length > 40 ? safeTitle.substring(0, 40) : safeTitle;
+
+    var content = '# $name\n';
+    var source = RecentDocSource.paste;
+    String? sourceRef;
+
+    final token = await HackmdAccount.getToken();
+    if (!mounted) return;
+    if (token != null && token.isNotEmpty) {
+      try {
+        final note = await HackmdApi.createNote(token, content);
+        content = note.content;
+        source = RecentDocSource.url;
+        sourceRef = 'https://hackmd.io/${note.permalink ?? note.id}';
+        if (!mounted) return;
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('已在 HackMD 建立筆記 (｡•ᴗ•｡)')));
+      } on HackmdApiException catch (e) {
+        if (!mounted) return;
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('${e.message} 改為建立本地草稿')));
+      } catch (_) {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('無法連到 HackMD，改為建立本地草稿 (´;ω;`)')),
+        );
+      }
+    }
+    if (!mounted) return;
+    await _openViewer(name, content, source: source, sourceRef: sourceRef);
+  }
+
   @override
   Widget build(BuildContext context) {
     final c = ItouColorsExt.of(context);
-    final isDark = widget.themeMode == ThemeMode.dark;
+    // The header logo picks a light/dark artwork from the *effective*
+    // brightness, which in "follow system" mode is the platform's.
+    final isDark = Theme.of(context).brightness == Brightness.dark;
 
     return Scaffold(
       backgroundColor: c.bg,
@@ -304,6 +378,18 @@ class _HomeScreenState extends State<HomeScreen> {
                           ],
                         ),
                       ),
+
+                    _StepCard(
+                      step: '00',
+                      title: '新建文件',
+                      accent: c.blue,
+                      child: ElevatedButton.icon(
+                        onPressed: _busy ? null : _createNewDoc,
+                        icon: const Icon(Icons.note_add_outlined, size: 18),
+                        label: const Text('建立新文件'),
+                      ),
+                    ),
+                    const SizedBox(height: 20),
 
                     _StepCard(
                       step: '01',
@@ -422,7 +508,9 @@ class _HomeScreenState extends State<HomeScreen> {
                           const SizedBox(height: 6),
                           GestureDetector(
                             onTap: () => launchUrl(
-                              Uri.parse('https://github.com/itousouta15/itouMD'),
+                              Uri.parse(
+                                'https://github.com/itousouta15/itouMD',
+                              ),
                             ),
                             child: Text(
                               '如果喜歡的話歡迎到 GitHub 給個 star ♡',
