@@ -5,6 +5,8 @@
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![Latest Release](https://img.shields.io/github/v/release/itousouta15/itouMD)](https://github.com/itousouta15/itouMD/releases/latest)
 
+**English：[README_EN.md](README_EN.md)**
+
 一款用於行動裝置的現代化 Markdown 檢視器與編輯器，深度整合 HackMD。
 
 ## 截圖
