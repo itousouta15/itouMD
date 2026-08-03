@@ -3,6 +3,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../theme.dart';
+import 'custom_fonts.dart';
 
 enum ReaderFontFamily {
   sans,
@@ -13,6 +14,7 @@ enum ReaderFontFamily {
   mantou,
   iansui,
   sourceHanSerif,
+  custom,
 }
 
 extension ReaderFontFamilyX on ReaderFontFamily {
@@ -25,6 +27,7 @@ extension ReaderFontFamilyX on ReaderFontFamily {
     ReaderFontFamily.mantou => '饅頭',
     ReaderFontFamily.iansui => '芫荽',
     ReaderFontFamily.sourceHanSerif => '思源宋',
+    ReaderFontFamily.custom => CustomFonts.currentFamily ?? '匯入字體',
   };
 
   TextStyle textStyle() => switch (this) {
@@ -36,6 +39,10 @@ extension ReaderFontFamilyX on ReaderFontFamily {
     ReaderFontFamily.mantou => const TextStyle(fontFamily: 'MantouSans'),
     ReaderFontFamily.iansui => GoogleFonts.iansui(),
     ReaderFontFamily.sourceHanSerif => GoogleFonts.notoSerifTc(),
+    ReaderFontFamily.custom =>
+      CustomFonts.currentFamily == null
+          ? GoogleFonts.notoSansTc()
+          : TextStyle(fontFamily: CustomFonts.currentFamily),
   };
 }
 
@@ -122,11 +129,17 @@ class ReaderPrefs {
     final fontIndex = prefs.getInt(_fontKey);
     final colorIndex = prefs.getInt(_colorKey);
     final customColorValue = prefs.getInt(_customColorKey);
+    var fontFamily =
+        (fontIndex != null && fontIndex < ReaderFontFamily.values.length)
+        ? ReaderFontFamily.values[fontIndex]
+        : ReaderFontFamily.sans;
+    // The imported font may have been removed/cleared since it was selected;
+    // fall back to the default instead of rendering with an unknown family.
+    if (fontFamily == ReaderFontFamily.custom && !CustomFonts.isLoaded) {
+      fontFamily = ReaderFontFamily.sans;
+    }
     return ReaderPrefs(
-      fontFamily:
-          (fontIndex != null && fontIndex < ReaderFontFamily.values.length)
-          ? ReaderFontFamily.values[fontIndex]
-          : ReaderFontFamily.sans,
+      fontFamily: fontFamily,
       fontSize: prefs.getDouble(_sizeKey) ?? defaultFontSize,
       textColor:
           (colorIndex != null && colorIndex < ReaderTextColor.values.length)

@@ -31,7 +31,85 @@ class ItouColors extends ThemeExtension<ItouColors> {
   });
 
   @override
-  ItouColors copyWith() => this;
+  ItouColors copyWith({
+    Color? bg,
+    Color? panel,
+    Color? panelHover,
+    Color? inset,
+    Color? border,
+    Color? border2,
+    Color? text,
+    Color? dim,
+    Color? mute,
+    Color? blue,
+    Color? purple,
+    Color? shadow,
+  }) {
+    return ItouColors(
+      bg: bg ?? this.bg,
+      panel: panel ?? this.panel,
+      panelHover: panelHover ?? this.panelHover,
+      inset: inset ?? this.inset,
+      border: border ?? this.border,
+      border2: border2 ?? this.border2,
+      text: text ?? this.text,
+      dim: dim ?? this.dim,
+      mute: mute ?? this.mute,
+      blue: blue ?? this.blue,
+      purple: purple ?? this.purple,
+      shadow: shadow ?? this.shadow,
+    );
+  }
+
+  /// A copy with the accent colour (`blue`) replaced by [blue]. The
+  /// secondary accent (`purple`) is derived from the chosen accent — hue
+  /// rotated and slightly desaturated so the two stay visually distinct —
+  /// unless an explicit [purple] is given. `null` keeps the defaults.
+  ItouColors withAccent(Color? blue, {Color? purple}) {
+    if (blue == null) return purple == null ? this : copyWith(purple: purple);
+    final hsl = HSLColor.fromColor(blue);
+    return copyWith(
+      blue: blue,
+      purple:
+          purple ??
+          hsl
+              .withHue((hsl.hue + 35) % 360)
+              .withSaturation((hsl.saturation * 0.7).clamp(0.0, 1.0).toDouble())
+              .toColor(),
+    );
+  }
+
+  /// A copy with the app background replaced by [bg] (`null` keeps the
+  /// default). The surfaces that sit on top of it — panel, panelHover,
+  /// inset — are derived from the chosen colour with small lightness
+  /// offsets mirroring the built-in palettes' direction (dark theme: panels
+  /// float lighter, insets sink darker; light theme: everything floats
+  /// lighter). The text/border tokens follow the background's luminance so
+  /// readability holds for any picked shade. The accent (`blue`/`purple`)
+  /// is untouched, so this chains after [withAccent].
+  ItouColors withBackground(Color? bg) {
+    if (bg == null) return this;
+    final isDarkish = bg.computeLuminance() < 0.5;
+    // Whichever default palette matches the background's luminance supplies
+    // the text/border tokens, so custom backgrounds can't break contrast.
+    final base = isDarkish ? ItouColors.dark : ItouColors.light;
+    final hsl = HSLColor.fromColor(bg);
+    double shift(double delta) => (hsl.lightness + delta).clamp(0.0, 1.0);
+    return ItouColors(
+      bg: bg,
+      panel: hsl.withLightness(shift(isDarkish ? 0.05 : 0.07)).toColor(),
+      panelHover: hsl.withLightness(shift(isDarkish ? 0.08 : 0.03)).toColor(),
+      inset: hsl.withLightness(shift(isDarkish ? -0.03 : 0.06)).toColor(),
+      border: base.border,
+      border2: base.border2,
+      text: base.text,
+      dim: base.dim,
+      mute: base.mute,
+      blue: blue,
+      purple: purple,
+      shadow: base.shadow,
+    );
+  }
 
   @override
   ItouColors lerp(ThemeExtension<ItouColors>? other, double t) {
@@ -81,6 +159,18 @@ class ItouColors extends ThemeExtension<ItouColors> {
     purple: Color(0xFF5C7CBF),
     shadow: Color(0x293C465A),
   );
+
+  /// A background derived from [accent] — the accent's hue, desaturated to
+  /// a soft tint and pinned to a fixed lightness — used by the "自動"
+  /// background option so the app picks a background that harmonizes with
+  /// the chosen accent (light theme: pale paper; dark theme: deep shade).
+  /// A desaturated (grayish) accent yields a near-neutral background.
+  static Color autoBackground(Color accent, Brightness brightness) {
+    final hsl = HSLColor.fromColor(accent);
+    final saturation = hsl.saturation.clamp(0.0, 0.15).toDouble();
+    final lightness = brightness == Brightness.dark ? 0.12 : 0.92;
+    return hsl.withSaturation(saturation).withLightness(lightness).toColor();
+  }
 }
 
 class ItouTheme {
@@ -179,6 +269,8 @@ class ItouTheme {
     );
   }
 
+  static ThemeData build(ItouColors c, Brightness brightness) =>
+      _build(c, brightness);
   static ThemeData get darkTheme => _build(ItouColors.dark, Brightness.dark);
   static ThemeData get lightTheme => _build(ItouColors.light, Brightness.light);
 }
