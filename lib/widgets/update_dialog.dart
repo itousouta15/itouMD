@@ -1,8 +1,10 @@
 import 'dart:io';
 
 import 'package:flutter/material.dart';
+import 'package:flutter_widget_from_html_core/flutter_widget_from_html_core.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+import '../services/markdown_renderer.dart';
 import '../services/update_checker.dart';
 import '../theme.dart';
 
@@ -35,6 +37,9 @@ class _UpdateDialogState extends State<_UpdateDialog> {
   bool _downloading = false;
   double _progress = 0;
   String? _error;
+  // Android 8+ refuses to open the installer without the "install unknown
+  // apps" permission; when it's missing we ask the user to enable it first.
+  bool _needInstallPermission = false;
 
   Future<void> _download() async {
     // In-app APK install is Android-only; anywhere else, hand the user to
@@ -49,18 +54,42 @@ class _UpdateDialogState extends State<_UpdateDialog> {
       setState(() => _error = '這個版本沒有附 APK 檔案 (´;ω;`)');
       return;
     }
+    // Check before downloading — a 70MB download wasted on a blocked
+    // installer is no fun.
+    final canInstall = await InstallHelper.canRequestPackageInstalls();
+    if (!mounted) return;
+    if (!canInstall) {
+      setState(() {
+        _needInstallPermission = true;
+        _error = null;
+      });
+      return;
+    }
+
     setState(() {
       _downloading = true;
       _progress = 0;
+      _needInstallPermission = false;
       _error = null;
     });
     try {
-      await UpdateChecker.downloadAndInstall(
+      final file = await UpdateChecker.downloadApk(
         url,
         onProgress: (p) {
           if (mounted) setState(() => _progress = p);
         },
       );
+      if (!mounted) return;
+      try {
+        await UpdateChecker.installApk(file);
+      } catch (e) {
+        if (!mounted) return;
+        setState(() {
+          _downloading = false;
+          _error = '開啟安裝介面失敗：$e';
+        });
+        return;
+      }
       if (!mounted) return;
       Navigator.of(context).pop();
       ScaffoldMessenger.of(
@@ -75,11 +104,18 @@ class _UpdateDialogState extends State<_UpdateDialog> {
     }
   }
 
+  Future<void> _openInstallSettings() async {
+    await InstallHelper.openUnknownAppSourcesSettings();
+  }
+
   @override
   Widget build(BuildContext context) {
     final c = ItouColorsExt.of(context);
     final notes = widget.info.notes ?? '';
     final notesShown = notes.length > 500 ? notes.substring(0, 500) : notes;
+    final notesHtml = notesShown.isEmpty
+        ? ''
+        : convertMarkdownToHtml(notesShown);
 
     return AlertDialog(
       backgroundColor: c.panel,
@@ -109,7 +145,7 @@ class _UpdateDialogState extends State<_UpdateDialog> {
                 ),
               ],
             ),
-            if (notesShown.isNotEmpty) ...[
+            if (notesHtml.isNotEmpty) ...[
               const SizedBox(height: 12),
               Container(
                 width: double.infinity,
@@ -119,11 +155,37 @@ class _UpdateDialogState extends State<_UpdateDialog> {
                   color: c.inset,
                   border: Border.all(color: c.border),
                 ),
+                // Release notes are Markdown (the GitHub release body);
+                // render them properly instead of raw text.
                 child: SingleChildScrollView(
-                  child: Text(
-                    notesShown,
-                    style: TextStyle(color: c.dim, fontSize: 12, height: 1.5),
+                  child: HtmlWidget(
+                    notesHtml,
+                    textStyle: TextStyle(
+                      color: c.dim,
+                      fontSize: 12,
+                      height: 1.5,
+                    ),
+                    onTapUrl: (url) async {
+                      final uri = Uri.tryParse(url);
+                      if (uri != null) await launchUrl(uri);
+                      return true;
+                    },
                   ),
+                ),
+              ),
+            ],
+            if (_needInstallPermission) ...[
+              const SizedBox(height: 12),
+              Text(
+                '需要允許「安裝未知應用程式」，才能開啟安裝介面。',
+                style: TextStyle(color: c.dim, fontSize: 12, height: 1.5),
+              ),
+              const SizedBox(height: 10),
+              Align(
+                alignment: Alignment.centerLeft,
+                child: OutlinedButton(
+                  onPressed: _openInstallSettings,
+                  child: const Text('開啟設定'),
                 ),
               ),
             ],
@@ -160,7 +222,10 @@ class _UpdateDialogState extends State<_UpdateDialog> {
           child: const Text('稍後'),
         ),
         if (!_downloading)
-          ElevatedButton(onPressed: _download, child: const Text('下載並更新')),
+          ElevatedButton(
+            onPressed: _needInstallPermission ? null : _download,
+            child: const Text('下載並更新'),
+          ),
       ],
     );
   }
