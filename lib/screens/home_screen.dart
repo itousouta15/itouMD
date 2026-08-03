@@ -5,6 +5,8 @@ import 'package:flutter/material.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+import '../services/github_account.dart';
+import '../services/github_api.dart';
 import '../services/hackmd_account.dart';
 import '../services/hackmd_api.dart';
 import '../services/markdown_source.dart';
@@ -45,6 +47,7 @@ class HomeScreen extends StatefulWidget {
 class _HomeScreenState extends State<HomeScreen> {
   final _pasteController = TextEditingController();
   final _urlController = TextEditingController();
+  final _githubRepoController = TextEditingController();
   bool _busy = false;
   String? _error;
   List<RecentDoc> _recents = [];
@@ -79,6 +82,7 @@ class _HomeScreenState extends State<HomeScreen> {
   void dispose() {
     _pasteController.dispose();
     _urlController.dispose();
+    _githubRepoController.dispose();
     super.dispose();
   }
 
@@ -174,6 +178,57 @@ class _HomeScreenState extends State<HomeScreen> {
     await Navigator.of(
       context,
     ).push(MaterialPageRoute(builder: (_) => const HackmdNotesScreen()));
+  }
+
+  /// Opens a GitHub repo's README straight into the viewer. Accepts
+  /// `owner/repo` or a full github.com URL; uses the linked GitHub account
+  /// (private repos included) when one is connected, public fetch otherwise.
+  Future<void> _openGithubRepo() async {
+    final input = _githubRepoController.text.trim();
+    if (input.isEmpty) return;
+    setState(() {
+      _busy = true;
+      _error = null;
+    });
+    try {
+      final hasScheme = Uri.tryParse(input)?.hasScheme ?? false;
+      final url = hasScheme ? input : 'https://github.com/$input';
+      final uri = Uri.tryParse(url);
+      if (uri == null || uri.host != 'github.com') {
+        throw MarkdownFetchException('請輸入 owner/repo 或 github.com 網址 (´;ω;`)');
+      }
+      final ref = GithubApi.parseUrl(url);
+      if (ref == null) {
+        throw MarkdownFetchException('這個 GitHub 網址格式不支援 (´;ω;`)');
+      }
+
+      String content;
+      String title;
+      final token = await GithubAccount.getToken();
+      if (token != null && token.isNotEmpty) {
+        final file = await GithubApi.getFile(token, ref);
+        content = file.content;
+        title = ref.displayName;
+      } else {
+        content = await fetchMarkdownFromUrl(url);
+        title = extractDocTitle(content) ?? ref.displayName;
+      }
+      if (!mounted) return;
+      await _openViewer(
+        title,
+        content,
+        source: RecentDocSource.url,
+        sourceRef: url,
+      );
+    } on MarkdownFetchException catch (e) {
+      if (mounted) setState(() => _error = e.message);
+    } on GithubApiException catch (e) {
+      if (mounted) setState(() => _error = e.message);
+    } catch (_) {
+      if (mounted) setState(() => _error = '開啟失敗，再試一次看看 (´;ω;`)');
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
   }
 
   Future<void> _fetchUrl() async {
@@ -474,6 +529,36 @@ class _HomeScreenState extends State<HomeScreen> {
                         onPressed: _openHackmdNotes,
                         icon: const Icon(Icons.cloud_queue_outlined, size: 18),
                         label: const Text('開啟筆記列表'),
+                      ),
+                    ),
+                    const SizedBox(height: 20),
+
+                    _StepCard(
+                      step: '05',
+                      title: '開啟 GitHub Repo',
+                      accent: c.blue,
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          TextField(
+                            controller: _githubRepoController,
+                            keyboardType: TextInputType.url,
+                            style: TextStyle(color: c.text, fontSize: 13.5),
+                            decoration: const InputDecoration(
+                              hintText: 'itousouta15/itouMD 或貼完整網址',
+                              border: InputBorder.none,
+                            ),
+                          ),
+                          const SizedBox(height: 12),
+                          ElevatedButton.icon(
+                            onPressed: _busy ? null : _openGithubRepo,
+                            icon: const Icon(
+                              Icons.folder_shared_outlined,
+                              size: 18,
+                            ),
+                            label: const Text('開啟 README'),
+                          ),
+                        ],
                       ),
                     ),
                     const SizedBox(height: 36),
