@@ -8,10 +8,14 @@ import '../services/note_cache.dart';
 import '../services/reader_prefs.dart';
 import '../services/recent_docs.dart';
 import '../services/sync_prefs.dart';
+import '../services/theme_prefs.dart';
 import '../services/ui_prefs.dart';
 import '../services/update_checker.dart';
 import '../theme.dart';
+import '../widgets/color_swatch_row.dart';
+import '../widgets/hsv_color_picker.dart';
 import '../widgets/loader_ring.dart';
+import '../widgets/reader_font_picker.dart';
 import '../widgets/update_dialog.dart';
 import 'hackmd_account_screen.dart';
 import 'onboarding_screen.dart';
@@ -19,14 +23,18 @@ import 'sync_history_screen.dart';
 
 class SettingsScreen extends StatefulWidget {
   final ThemeMode themeMode;
-  final VoidCallback onToggleTheme;
+  final ValueChanged<ThemeMode> onThemeModeChanged;
+  final ThemeCustomization customization;
+  final ValueChanged<ThemeCustomization> onCustomizationChanged;
   final UiScale uiScale;
   final ValueChanged<UiScale> onUiScaleChanged;
 
   const SettingsScreen({
     super.key,
     required this.themeMode,
-    required this.onToggleTheme,
+    required this.onThemeModeChanged,
+    required this.customization,
+    required this.onCustomizationChanged,
     required this.uiScale,
     required this.onUiScaleChanged,
   });
@@ -41,6 +49,29 @@ class _SettingsScreenState extends State<SettingsScreen> {
   bool _autoRefresh = true;
   ConflictResolution _conflictResolution = ConflictResolution.ask;
   String _appVersion = '';
+  // Live mirrors of the app-level state. The settings screen is a pushed
+  // route, so its `widget` is frozen at push time — if we read the
+  // customization/theme/ui-scale straight off `widget`, tapping a swatch
+  // would update the app but never re-highlight the choice here. Mirror
+  // locally (like `_readerPrefs`) and forward to the callbacks.
+  late ThemeCustomization _custom = widget.customization;
+  late ThemeMode _themeMode = widget.themeMode;
+  late UiScale _uiScale = widget.uiScale;
+
+  void _setCustom(ThemeCustomization next) {
+    setState(() => _custom = next);
+    widget.onCustomizationChanged(next);
+  }
+
+  void _setThemeMode(ThemeMode mode) {
+    setState(() => _themeMode = mode);
+    widget.onThemeModeChanged(mode);
+  }
+
+  void _setUiScale(UiScale next) {
+    setState(() => _uiScale = next);
+    widget.onUiScaleChanged(next);
+  }
 
   @override
   void initState() {
@@ -107,107 +138,58 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 
   Future<void> _showColorPicker() async {
-    double hue = HSVColor.fromColor(_readerPrefs.customColor).hue;
-    double saturation = HSVColor.fromColor(_readerPrefs.customColor).saturation;
-    double brightness = HSVColor.fromColor(_readerPrefs.customColor).value;
-
-    final result = await showDialog<Color>(
-      context: context,
-      builder: (ctx) {
-        return StatefulBuilder(
-          builder: (ctx, setDialogState) {
-            final c = ItouColorsExt.of(ctx);
-            final current = HSVColor.fromAHSV(
-              1,
-              hue,
-              saturation,
-              brightness,
-            ).toColor();
-            return AlertDialog(
-              title: const Text('自訂顏色'),
-              content: SizedBox(
-                width: 260,
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Container(
-                      width: 48,
-                      height: 48,
-                      decoration: BoxDecoration(
-                        color: current,
-                        shape: BoxShape.circle,
-                        border: Border.all(color: c.border2, width: 2),
-                      ),
-                    ),
-                    const SizedBox(height: 18),
-                    _HsvSlider(
-                      label: '色相',
-                      gradientColors: const [
-                        Colors.red,
-                        Colors.yellow,
-                        Colors.green,
-                        Colors.cyan,
-                        Colors.blue,
-                        Color(0xFFFF00FF),
-                        Colors.red,
-                      ],
-                      value: hue,
-                      max: 360,
-                      thumbColor: HSVColor.fromAHSV(1, hue, 1, 1).toColor(),
-                      onChanged: (v) => setDialogState(() => hue = v),
-                    ),
-                    _HsvSlider(
-                      label: '飽和度',
-                      gradientColors: [
-                        HSVColor.fromAHSV(1, hue, 0, brightness).toColor(),
-                        HSVColor.fromAHSV(1, hue, 1, brightness).toColor(),
-                      ],
-                      value: saturation,
-                      max: 1,
-                      thumbColor: current,
-                      onChanged: (v) => setDialogState(() => saturation = v),
-                    ),
-                    _HsvSlider(
-                      label: '亮度',
-                      gradientColors: [
-                        Colors.black,
-                        HSVColor.fromAHSV(1, hue, saturation, 1).toColor(),
-                      ],
-                      value: brightness,
-                      max: 1,
-                      thumbColor: current,
-                      onChanged: (v) => setDialogState(() => brightness = v),
-                    ),
-                    const SizedBox(height: 8),
-                    Text(
-                      '#${current.toARGB32().toRadixString(16).padLeft(8, '0').substring(2).toUpperCase()}',
-                      style: TextStyle(
-                        color: c.mute,
-                        fontSize: 11,
-                        fontFamily: 'monospace',
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              actions: [
-                TextButton(
-                  onPressed: () => Navigator.of(ctx).pop(),
-                  child: const Text('取消'),
-                ),
-                TextButton(
-                  onPressed: () => Navigator.of(ctx).pop(current),
-                  child: const Text('確定'),
-                ),
-              ],
-            );
-          },
-        );
-      },
+    final result = await showHsvColorPicker(
+      context,
+      initial: _readerPrefs.customColor,
     );
     if (!mounted || result == null) return;
     final next = _readerPrefs.copyWith(customColor: result);
     _updateReaderPrefs(next);
+  }
+
+  Future<void> _pickAccent(Brightness brightness) async {
+    final custom = _custom;
+    final current =
+        custom.accentFor(brightness) ??
+        (brightness == Brightness.dark
+            ? ItouColors.dark.blue
+            : ItouColors.light.blue);
+    // Keep accents within the brightness band that holds contrast on that
+    // theme: light theme wants darker shades, dark theme brighter ones.
+    final result = await showHsvColorPicker(
+      context,
+      initial: current,
+      minBrightness: brightness == Brightness.dark ? 0.5 : 0.2,
+      maxBrightness: brightness == Brightness.dark ? 0.9 : 0.6,
+    );
+    if (!mounted || result == null) return;
+    _setCustom(
+      brightness == Brightness.dark
+          ? custom.copyWith(darkAccent: result)
+          : custom.copyWith(lightAccent: result),
+    );
+  }
+
+  Future<void> _pickBackground(Brightness brightness) async {
+    final custom = _custom;
+    final current =
+        custom.backgroundFor(brightness) ??
+        (brightness == Brightness.dark
+            ? ItouColors.dark.bg
+            : ItouColors.light.bg);
+    // Light theme backgrounds must stay light, dark theme backgrounds dark.
+    final result = await showHsvColorPicker(
+      context,
+      initial: current,
+      minBrightness: brightness == Brightness.dark ? 0.0 : 0.45,
+      maxBrightness: brightness == Brightness.dark ? 0.55 : 1.0,
+    );
+    if (!mounted || result == null) return;
+    _setCustom(
+      brightness == Brightness.dark
+          ? custom.copyWith(darkBackground: result)
+          : custom.copyWith(lightBackground: result),
+    );
   }
 
   Future<void> _clearRecents() async {
@@ -229,7 +211,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   @override
   Widget build(BuildContext context) {
     final c = ItouColorsExt.of(context);
-    final isDark = widget.themeMode == ThemeMode.dark;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     return Scaffold(
       backgroundColor: c.bg,
       appBar: AppBar(title: const Text('設定')),
@@ -240,17 +222,72 @@ class _SettingsScreenState extends State<SettingsScreen> {
           const SizedBox(height: 8),
           _Panel(
             children: [
-              _SettingRow(
-                icon: isDark
-                    ? Icons.dark_mode_outlined
-                    : Icons.light_mode_outlined,
-                label: '深色模式',
-                trailing: Switch(
-                  value: isDark,
-                  onChanged: (_) => widget.onToggleTheme(),
-                  activeThumbColor: c.blue,
+              Padding(
+                padding: const EdgeInsets.fromLTRB(14, 12, 14, 14),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Icon(
+                          isDark
+                              ? Icons.dark_mode_outlined
+                              : Icons.light_mode_outlined,
+                          size: 20,
+                          color: c.dim,
+                        ),
+                        const SizedBox(width: 12),
+                        Text(
+                          '主題',
+                          style: TextStyle(color: c.text, fontSize: 14),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 12),
+                    Wrap(
+                      spacing: 8,
+                      runSpacing: 8,
+                      children: ThemeMode.values.map((mode) {
+                        return _ChoiceTile(
+                          label: _themeModeLabel(mode),
+                          selected: _themeMode == mode,
+                          onTap: () => _setThemeMode(mode),
+                        );
+                      }).toList(),
+                    ),
+                    const SizedBox(height: 6),
+                    Text(
+                      '「跟隨系統」會自動跟著裝置的深淺色設定切換。',
+                      style: TextStyle(color: c.dim, fontSize: 12),
+                    ),
+                  ],
                 ),
-                onTap: widget.onToggleTheme,
+              ),
+              Divider(height: 1, thickness: 1, color: c.border),
+              _ThemeColorsSection(
+                custom: _custom,
+                onSelectAccent: (brightness, accent) => _setCustom(
+                  brightness == Brightness.dark
+                      ? _custom.copyWith(darkAccent: accent)
+                      : _custom.copyWith(lightAccent: accent),
+                ),
+                onSelectBackground: (brightness, background) => _setCustom(
+                  brightness == Brightness.dark
+                      ? _custom.copyWith(darkBackground: background)
+                      : _custom.copyWith(lightBackground: background),
+                ),
+                onPickCustom: (brightness, role) =>
+                    role == _ThemeColorRole.accent
+                    ? _pickAccent(brightness)
+                    : _pickBackground(brightness),
+                onReset: (brightness) => _setCustom(
+                  brightness == Brightness.dark
+                      ? _custom.copyWith(darkAccent: null, darkBackground: null)
+                      : _custom.copyWith(
+                          lightAccent: null,
+                          lightBackground: null,
+                        ),
+                ),
               ),
               Divider(height: 1, thickness: 1, color: c.border),
               Padding(
@@ -271,8 +308,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       children: UiScale.values.map((s) {
                         return _ChoiceTile(
                           label: s.label,
-                          selected: widget.uiScale == s,
-                          onTap: () => widget.onUiScaleChanged(s),
+                          selected: _uiScale == s,
+                          onTap: () => _setUiScale(s),
                         );
                       }).toList(),
                     ),
@@ -328,28 +365,33 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       style: TextStyle(color: c.dim, fontSize: 12),
                     ),
                     const SizedBox(height: 12),
-                    RadioGroup<ConflictResolution>(
-                      groupValue: _conflictResolution,
-                      onChanged: (v) {
-                        if (v == null) return;
-                        setState(() => _conflictResolution = v);
-                        SyncPrefs.setConflictResolution(v);
-                      },
-                      child: Column(
-                        children: [
-                          for (final option in ConflictResolution.values)
-                            RadioListTile<ConflictResolution>(
-                              title: Text(
-                                _conflictLabel(option),
-                                style: TextStyle(color: c.text, fontSize: 13),
+                    // A transparent Material between the panel's DecoratedBox
+                    // and the tiles, so ListTile ink/ripples stay visible.
+                    Material(
+                      type: MaterialType.transparency,
+                      child: RadioGroup<ConflictResolution>(
+                        groupValue: _conflictResolution,
+                        onChanged: (v) {
+                          if (v == null) return;
+                          setState(() => _conflictResolution = v);
+                          SyncPrefs.setConflictResolution(v);
+                        },
+                        child: Column(
+                          children: [
+                            for (final option in ConflictResolution.values)
+                              RadioListTile<ConflictResolution>(
+                                title: Text(
+                                  _conflictLabel(option),
+                                  style: TextStyle(color: c.text, fontSize: 13),
+                                ),
+                                value: option,
+                                contentPadding: EdgeInsets.zero,
+                                dense: true,
+                                visualDensity: VisualDensity.compact,
+                                activeColor: c.blue,
                               ),
-                              value: option,
-                              contentPadding: EdgeInsets.zero,
-                              dense: true,
-                              visualDensity: VisualDensity.compact,
-                              activeColor: c.blue,
-                            ),
-                        ],
+                          ],
+                        ),
                       ),
                     ),
                   ],
@@ -520,6 +562,145 @@ String _conflictLabel(ConflictResolution option) => switch (option) {
   ConflictResolution.cancel => '取消同步',
 };
 
+String _themeModeLabel(ThemeMode mode) => switch (mode) {
+  ThemeMode.light => '淺色',
+  ThemeMode.dark => '深色',
+  ThemeMode.system => '跟隨系統',
+};
+
+/// Which colour a custom picker edits within a theme.
+enum _ThemeColorRole { accent, background }
+
+/// The theme colour section ("主題顏色"): one block per light/dark theme,
+/// each with an accent row (default + per-theme presets + custom) and an
+/// auto/custom background row, all using the shared big-circle swatch row.
+class _ThemeColorsSection extends StatelessWidget {
+  final ThemeCustomization custom;
+  final void Function(Brightness brightness, Color? accent) onSelectAccent;
+  final void Function(Brightness brightness, Color? background)
+  onSelectBackground;
+  final void Function(Brightness brightness, _ThemeColorRole role) onPickCustom;
+  final void Function(Brightness brightness) onReset;
+
+  const _ThemeColorsSection({
+    required this.custom,
+    required this.onSelectAccent,
+    required this.onSelectBackground,
+    required this.onPickCustom,
+    required this.onReset,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final c = ItouColorsExt.of(context);
+
+    Widget themeBlock({
+      required String label,
+      required Color? accent,
+      required Color? background,
+      required Brightness brightness,
+    }) {
+      final isDark = brightness == Brightness.dark;
+      final presets = isDark ? darkAccentPresets : lightAccentPresets;
+      final defaultAccent = isDark
+          ? ItouColors.dark.blue
+          : ItouColors.light.blue;
+      final defaultBg = isDark ? ItouColors.dark.bg : ItouColors.light.bg;
+      final presetIndex = accent == null ? -1 : presets.indexOf(accent);
+      // Index 0 = 預設 (theme's built-in colour); -1 = custom selected.
+      final accentIndex = accent == null
+          ? 0
+          : presetIndex >= 0
+          ? presetIndex + 1
+          : -1;
+      // The "自動" circle previews the background that will actually apply:
+      // an accent-derived tint once an accent is set, the theme default
+      // otherwise.
+      final autoBg = accent != null
+          ? ItouColors.autoBackground(accent, brightness)
+          : defaultBg;
+
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            children: [
+              Text(
+                label,
+                style: TextStyle(
+                  color: c.text,
+                  fontSize: 13,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+              const Spacer(),
+              GestureDetector(
+                onTap: () => onReset(brightness),
+                child: Text(
+                  '重設',
+                  style: TextStyle(color: c.mute, fontSize: 11),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Text('主色', style: TextStyle(color: c.dim, fontSize: 11)),
+          const SizedBox(height: 6),
+          ColorSwatchRow(
+            swatches: [defaultAccent, ...presets],
+            selectedIndex: accentIndex,
+            customColor: accent,
+            onSwatchTap: (i) =>
+                onSelectAccent(brightness, i == 0 ? null : presets[i - 1]),
+            onCustomTap: () => onPickCustom(brightness, _ThemeColorRole.accent),
+          ),
+          const SizedBox(height: 14),
+          Text('背景', style: TextStyle(color: c.dim, fontSize: 11)),
+          const SizedBox(height: 6),
+          ColorSwatchRow(
+            swatches: [autoBg],
+            selectedIndex: background == null ? 0 : -1,
+            customColor: background,
+            onSwatchTap: (_) => onSelectBackground(brightness, null),
+            onCustomTap: () =>
+                onPickCustom(brightness, _ThemeColorRole.background),
+          ),
+        ],
+      );
+    }
+
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(14, 12, 14, 14),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Text('主題顏色', style: TextStyle(color: c.text, fontSize: 14)),
+          const SizedBox(height: 4),
+          Text(
+            '主色用於按鈕與連結等強調色；背景「自動」會跟隨主色衍生，'
+            '淺色與深色主題可分別設定。',
+            style: TextStyle(color: c.dim, fontSize: 12),
+          ),
+          const SizedBox(height: 14),
+          themeBlock(
+            label: '淺色主題',
+            accent: custom.lightAccent,
+            background: custom.lightBackground,
+            brightness: Brightness.light,
+          ),
+          const SizedBox(height: 14),
+          themeBlock(
+            label: '深色主題',
+            accent: custom.darkAccent,
+            background: custom.darkBackground,
+            brightness: Brightness.dark,
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 class _Panel extends StatelessWidget {
   final List<Widget> children;
 
@@ -611,21 +792,9 @@ class _ReaderPrefsSection extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 10),
-          Wrap(
-            spacing: 8,
-            runSpacing: 8,
-            children: ReaderFontFamily.values.map((f) {
-              final selected = prefs.fontFamily == f;
-              return SizedBox(
-                width: 78,
-                child: _ChoiceTile(
-                  label: f.label,
-                  selected: selected,
-                  previewStyle: f.textStyle(),
-                  onTap: () => onChanged(prefs.copyWith(fontFamily: f)),
-                ),
-              );
-            }).toList(),
+          ReaderFontPicker(
+            selected: prefs.fontFamily,
+            onChanged: (f) => onChanged(prefs.copyWith(fontFamily: f)),
           ),
           const SizedBox(height: 10),
           Container(
@@ -712,55 +881,12 @@ class _ReaderPrefsSection extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 12),
-          Wrap(
-            spacing: 8,
-            runSpacing: 10,
-            children: ReaderTextColor.values.map((tc) {
-              final selected = prefs.textColor == tc;
-              final swatch = tc == ReaderTextColor.custom
-                  ? prefs.customColor
-                  : tc.resolve(c, brightness);
-              return GestureDetector(
-                onTap: () {
-                  if (tc == ReaderTextColor.custom) {
-                    onCustomColorTap();
-                  } else {
-                    onChanged(prefs.copyWith(textColor: tc));
-                  }
-                },
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Container(
-                      width: 24,
-                      height: 24,
-                      decoration: BoxDecoration(
-                        color: swatch,
-                        shape: BoxShape.circle,
-                        border: Border.all(
-                          color: selected ? c.blue : c.border2,
-                          width: selected ? 2.5 : 1,
-                        ),
-                      ),
-                      child: tc == ReaderTextColor.custom
-                          ? const Icon(Icons.add, size: 14, color: Colors.white)
-                          : null,
-                    ),
-                    const SizedBox(width: 4),
-                    Text(
-                      tc.label,
-                      style: TextStyle(
-                        color: selected ? c.text : c.dim,
-                        fontSize: 12,
-                        fontWeight: selected
-                            ? FontWeight.w600
-                            : FontWeight.w400,
-                      ),
-                    ),
-                  ],
-                ),
-              );
-            }).toList(),
+          ReaderColorRow(
+            selected: prefs.textColor,
+            customColor: prefs.customColor,
+            brightness: brightness,
+            onSwatch: (tc) => onChanged(prefs.copyWith(textColor: tc)),
+            onCustom: onCustomColorTap,
           ),
         ],
       ),
@@ -772,19 +898,16 @@ class _ChoiceTile extends StatelessWidget {
   final String label;
   final bool selected;
   final VoidCallback onTap;
-  final TextStyle? previewStyle;
 
   const _ChoiceTile({
     required this.label,
     required this.selected,
     required this.onTap,
-    this.previewStyle,
   });
 
   @override
   Widget build(BuildContext context) {
     final c = ItouColorsExt.of(context);
-    final base = previewStyle ?? const TextStyle();
     return GestureDetector(
       onTap: onTap,
       child: Container(
@@ -796,83 +919,13 @@ class _ChoiceTile extends StatelessWidget {
         ),
         child: Text(
           label,
-          style: base.copyWith(
+          style: TextStyle(
             color: selected ? c.text : c.dim,
             fontSize: 13,
             fontWeight: selected ? FontWeight.w600 : FontWeight.w400,
           ),
         ),
       ),
-    );
-  }
-}
-
-class _HsvSlider extends StatelessWidget {
-  final String label;
-  final List<Color> gradientColors;
-  final double value;
-  final double max;
-  final Color thumbColor;
-  final ValueChanged<double> onChanged;
-
-  const _HsvSlider({
-    required this.label,
-    required this.gradientColors,
-    required this.value,
-    required this.max,
-    required this.thumbColor,
-    required this.onChanged,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final c = ItouColorsExt.of(context);
-    final display = max <= 1 ? (value * 100).round() : value.round();
-    final suffix = max <= 1 ? '%' : '°';
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Row(
-          children: [
-            Text(label, style: TextStyle(color: c.text, fontSize: 13)),
-            const Spacer(),
-            Text(
-              '$display$suffix',
-              style: TextStyle(color: c.mute, fontSize: 12),
-            ),
-          ],
-        ),
-        Stack(
-          alignment: Alignment.center,
-          children: [
-            Container(
-              height: 8,
-              margin: const EdgeInsets.symmetric(horizontal: 10),
-              decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(4),
-                gradient: LinearGradient(colors: gradientColors),
-              ),
-            ),
-            SliderTheme(
-              data: SliderThemeData(
-                trackHeight: 8,
-                thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 10),
-                overlayShape: const RoundSliderOverlayShape(overlayRadius: 18),
-                activeTrackColor: Colors.transparent,
-                inactiveTrackColor: Colors.transparent,
-                thumbColor: thumbColor,
-              ),
-              child: Slider(
-                value: value,
-                min: 0,
-                max: max,
-                onChanged: onChanged,
-              ),
-            ),
-          ],
-        ),
-        const SizedBox(height: 10),
-      ],
     );
   }
 }
