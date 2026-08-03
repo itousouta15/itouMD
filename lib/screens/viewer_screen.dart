@@ -1624,9 +1624,17 @@ class _ViewerScreenState extends State<ViewerScreen> {
 const _aiInstructions = <(String, String)>[
   ('潤飾', '請潤飾以下內容，讓它更通順自然，保留 Markdown 格式：\n\n{text}'),
   ('翻譯成繁體中文', '請將以下內容翻譯成繁體中文，保留 Markdown 格式：\n\n{text}'),
+  ('翻譯成英文', '請將以下內容翻譯成英文，保留 Markdown 格式：\n\n{text}'),
   ('縮寫', '請將以下內容縮短並保留重點，保留 Markdown 格式：\n\n{text}'),
   ('改寫', '請以不同寫法改寫以下內容、保留原意，保留 Markdown 格式：\n\n{text}'),
   ('生成摘要', '請為以下內容生成簡短摘要，保留 Markdown 格式：\n\n{text}'),
+  ('擴寫內容', '請將以下內容擴寫得更詳細完整，補足說明與例子，保留 Markdown 格式：\n\n{text}'),
+  ('整理成表格', '請將以下內容整理成 Markdown 表格，設計清楚的欄位與表頭：\n\n{text}'),
+  ('整理成清單', '請將以下內容整理成條列式清單（項目符號或編號），保留重點：\n\n{text}'),
+  ('建議標題', '請為以下內容建議 3 個標題，直接列出，不要其他說明：\n\n{text}'),
+  ('改得更正式', '請將以下內容改寫成正式、書面的語氣，保留 Markdown 格式：\n\n{text}'),
+  ('改得更口語', '請將以下內容改寫成輕鬆口語的語氣，保留 Markdown 格式：\n\n{text}'),
+  ('修正錯別字與格式', '請修正以下內容的錯別字、標點與 Markdown 格式問題，只輸出修正後的內容：\n\n{text}'),
 ];
 
 /// The editor's AI assistant sheet: two tabs — 快捷指令 (presets with an
@@ -1721,7 +1729,12 @@ class _AiAssistantSheetState extends State<_AiAssistantSheet> {
                         targetText: _targetText,
                         onApply: _applyResult,
                       ),
-                      _AiChatTab(onApply: _applyResult),
+                      _AiChatTab(
+                        docText: widget.docText,
+                        selection: widget.selection,
+                        hasSelection: widget.hasSelection,
+                        onApply: _applyResult,
+                      ),
                     ],
                   ),
                 ),
@@ -1917,12 +1930,23 @@ class _AiPresetTabState extends State<_AiPresetTab> {
   }
 }
 
-/// 自由交流 tab: multi-turn chat with streaming replies. History lives only
-/// for the lifetime of this sheet — reopening starts a fresh conversation.
+/// 自由交流 tab: multi-turn chat with streaming replies. The document
+/// (and current selection, when there is one) is injected into the system
+/// prompt on every turn so the model knows what the user is talking about.
+/// History lives only for the lifetime of this sheet — reopening starts a
+/// fresh conversation.
 class _AiChatTab extends StatefulWidget {
+  final String docText;
+  final TextSelection selection;
+  final bool hasSelection;
   final ValueChanged<String> onApply;
 
-  const _AiChatTab({required this.onApply});
+  const _AiChatTab({
+    required this.docText,
+    required this.selection,
+    required this.hasSelection,
+    required this.onApply,
+  });
 
   @override
   State<_AiChatTab> createState() => _AiChatTabState();
@@ -1953,6 +1977,26 @@ class _AiChatTabState extends State<_AiChatTab> {
     });
   }
 
+  /// The document context injected into the system prompt on every turn:
+  /// the full document (truncated) plus the current selection, so the model
+  /// can answer questions like "把選取的這段改成口語".
+  String _contextBlock() {
+    const maxDocChars = 6000;
+    final doc = widget.docText;
+    final truncated = doc.length > maxDocChars
+        ? '${doc.substring(0, maxDocChars)}\n…（內容已截斷）'
+        : doc;
+    final buffer = StringBuffer('以下是使用者正在編輯的文件內容：\n```\n$truncated\n```');
+    if (widget.hasSelection) {
+      final sel = widget.selection;
+      buffer.write(
+        '\n目前選取的文字：\n```\n'
+        '${widget.docText.substring(sel.start, sel.end)}\n```',
+      );
+    }
+    return buffer.toString();
+  }
+
   Future<void> _send() async {
     final text = _inputController.text.trim();
     if (text.isEmpty || _busy) return;
@@ -1975,6 +2019,7 @@ class _AiChatTabState extends State<_AiChatTab> {
         model: model,
         apiKey: apiKey,
         messages: List.of(_messages),
+        extraSystem: _contextBlock(),
         onDelta: (delta) {
           reply += delta;
           if (!mounted) return;
