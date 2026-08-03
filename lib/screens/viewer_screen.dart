@@ -1629,9 +1629,10 @@ const _aiInstructions = <(String, String)>[
   ('生成摘要', '請為以下內容生成簡短摘要，保留 Markdown 格式：\n\n{text}'),
 ];
 
-/// The editor's AI assistant sheet: pick an instruction, wait for the LLM,
-/// preview the result, then splice it back. Pops `(result, targetRange)` on
-/// 套用.
+/// The editor's AI assistant sheet: two tabs — 快捷指令 (presets with an
+/// add/remove diff preview) and 自由交流 (multi-turn streaming chat). Both
+/// pop `(result, targetRange)` on 套用 so the caller can splice the AI
+/// output into the controller.
 class _AiAssistantSheet extends StatefulWidget {
   final String docText;
   final TextSelection selection;
@@ -1648,11 +1649,6 @@ class _AiAssistantSheet extends StatefulWidget {
 }
 
 class _AiAssistantSheetState extends State<_AiAssistantSheet> {
-  bool _busy = false;
-  bool _showDiff = true;
-  String? _error;
-  String? _result;
-
   /// The text the LLM will process: the selection when there is one,
   /// otherwise the whole document.
   String get _targetText => widget.hasSelection
@@ -1663,11 +1659,104 @@ class _AiAssistantSheetState extends State<_AiAssistantSheet> {
       ? TextRange(start: widget.selection.start, end: widget.selection.end)
       : TextRange(start: 0, end: widget.docText.length);
 
-  /// Line-level changes the AI made to [_targetText].
+  void _applyResult(String result) {
+    Navigator.of(context).pop((result, _targetRange));
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final c = ItouColorsExt.of(context);
+    return SafeArea(
+      child: Container(
+        margin: const EdgeInsets.all(12),
+        padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
+        decoration: BoxDecoration(
+          color: c.panel,
+          border: Border.all(color: c.border2),
+        ),
+        child: SizedBox(
+          height: MediaQuery.of(context).size.height * 0.72,
+          child: DefaultTabController(
+            length: 2,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Row(
+                  children: [
+                    Icon(Icons.auto_awesome, size: 18, color: c.blue),
+                    const SizedBox(width: 8),
+                    Text(
+                      'AI 助理',
+                      style: TextStyle(
+                        color: c.text,
+                        fontSize: 14,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    const Spacer(),
+                    Text(
+                      widget.hasSelection
+                          ? '已選取 ${_targetText.length} 字'
+                          : '整篇文件',
+                      style: TextStyle(color: c.mute, fontSize: 11),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 10),
+                TabBar(
+                  tabs: const [
+                    Tab(text: '快捷指令'),
+                    Tab(text: '自由交流'),
+                  ],
+                  labelColor: c.text,
+                  unselectedLabelColor: c.dim,
+                  indicatorColor: c.blue,
+                  dividerColor: c.border,
+                ),
+                const SizedBox(height: 4),
+                Expanded(
+                  child: TabBarView(
+                    children: [
+                      _AiPresetTab(
+                        targetText: _targetText,
+                        onApply: _applyResult,
+                      ),
+                      _AiChatTab(onApply: _applyResult),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// 快捷指令 tab: pick an instruction, wait for the LLM, review the
+/// add/remove diff, then 套用.
+class _AiPresetTab extends StatefulWidget {
+  final String targetText;
+  final ValueChanged<String> onApply;
+
+  const _AiPresetTab({required this.targetText, required this.onApply});
+
+  @override
+  State<_AiPresetTab> createState() => _AiPresetTabState();
+}
+
+class _AiPresetTabState extends State<_AiPresetTab> {
+  bool _busy = false;
+  bool _showDiff = true;
+  String? _error;
+  String? _result;
+
+  /// Line-level changes the AI made to [widget.targetText].
   List<DiffHunk> get _diffHunks {
     final result = _result;
     if (result == null) return const [];
-    return diffTexts(_targetText, result);
+    return diffTexts(widget.targetText, result);
   }
 
   int get _addedCount => diffStats(_diffHunks).$1;
@@ -1688,7 +1777,7 @@ class _AiAssistantSheetState extends State<_AiAssistantSheet> {
         baseUrl: baseUrl,
         model: model,
         apiKey: apiKey,
-        userPrompt: instruction.replaceFirst('{text}', _targetText),
+        userPrompt: instruction.replaceFirst('{text}', widget.targetText),
       );
       if (mounted) setState(() => _result = reply);
     } on LlmException catch (e) {
@@ -1703,154 +1792,396 @@ class _AiAssistantSheetState extends State<_AiAssistantSheet> {
   void _apply() {
     final result = _result;
     if (result == null) return;
-    Navigator.of(context).pop((result, _targetRange));
+    widget.onApply(result);
   }
 
   @override
   Widget build(BuildContext context) {
     final c = ItouColorsExt.of(context);
-    return SafeArea(
-      child: Container(
-        margin: const EdgeInsets.all(12),
-        padding: const EdgeInsets.all(16),
-        decoration: BoxDecoration(
-          color: c.panel,
-          border: Border.all(color: c.border2),
-        ),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
+    return SingleChildScrollView(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          const SizedBox(height: 8),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              for (final (label, prompt) in _aiInstructions)
+                GestureDetector(
+                  onTap: _busy ? null : () => _run(prompt),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                      vertical: 8,
+                      horizontal: 12,
+                    ),
+                    decoration: BoxDecoration(
+                      color: c.inset,
+                      border: Border.all(color: c.border),
+                    ),
+                    child: Text(
+                      label,
+                      style: TextStyle(color: c.text, fontSize: 12),
+                    ),
+                  ),
+                ),
+            ],
+          ),
+          if (_busy) ...[
+            const SizedBox(height: 14),
+            LinearProgressIndicator(
+              minHeight: 3,
+              backgroundColor: c.border2,
+              color: c.blue,
+            ),
+            const SizedBox(height: 6),
+            Text('AI 處理中…', style: TextStyle(color: c.mute, fontSize: 11)),
+          ],
+          if (_error != null) ...[
+            const SizedBox(height: 12),
+            Text(
+              _error!,
+              style: const TextStyle(color: Color(0xFFE0777A), fontSize: 12),
+            ),
+          ],
+          if (_result != null) ...[
+            const SizedBox(height: 12),
             Row(
               children: [
-                Icon(Icons.auto_awesome, size: 18, color: c.blue),
-                const SizedBox(width: 8),
                 Text(
-                  'AI 助理',
-                  style: TextStyle(
-                    color: c.text,
-                    fontSize: 14,
-                    fontWeight: FontWeight.w600,
-                  ),
+                  '新增 $_addedCount 行・刪除 $_removedCount 行',
+                  style: TextStyle(color: c.dim, fontSize: 11.5),
                 ),
                 const Spacer(),
-                Text(
-                  widget.hasSelection ? '已選取 ${_targetText.length} 字' : '整篇文件',
-                  style: TextStyle(color: c.mute, fontSize: 11),
+                GestureDetector(
+                  onTap: () => setState(() => _showDiff = !_showDiff),
+                  child: Text(
+                    _showDiff ? '顯示原始文字' : '顯示差異',
+                    style: TextStyle(color: c.blue, fontSize: 12),
+                  ),
                 ),
               ],
+            ),
+            const SizedBox(height: 6),
+            Container(
+              constraints: const BoxConstraints(maxHeight: 220),
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                color: c.inset,
+                border: Border.all(color: c.border),
+              ),
+              child: SingleChildScrollView(
+                child: _showDiff
+                    ? (_diffHunks.isEmpty
+                          ? Text(
+                              '沒有變更',
+                              style: TextStyle(color: c.mute, fontSize: 12),
+                            )
+                          : DiffView(hunks: _diffHunks, c: c))
+                    : Text(
+                        _result!,
+                        style: TextStyle(
+                          color: c.text,
+                          fontSize: 12.5,
+                          height: 1.5,
+                        ),
+                      ),
+              ),
             ),
             const SizedBox(height: 12),
-            Wrap(
-              spacing: 8,
-              runSpacing: 8,
+            Row(
               children: [
-                for (final (label, prompt) in _aiInstructions)
-                  GestureDetector(
-                    onTap: _busy ? null : () => _run(prompt),
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(
-                        vertical: 8,
-                        horizontal: 12,
-                      ),
-                      decoration: BoxDecoration(
-                        color: c.inset,
-                        border: Border.all(color: c.border),
-                      ),
-                      child: Text(
-                        label,
-                        style: TextStyle(color: c.text, fontSize: 12),
-                      ),
-                    ),
+                Expanded(
+                  child: ElevatedButton(
+                    onPressed: () => Navigator.of(context).pop(),
+                    child: const Text('取消'),
                   ),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: ElevatedButton(
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: c.blue,
+                      foregroundColor: Colors.white,
+                    ),
+                    onPressed: _apply,
+                    child: const Text('套用'),
+                  ),
+                ),
               ],
             ),
-            if (_busy) ...[
-              const SizedBox(height: 14),
-              LinearProgressIndicator(
-                minHeight: 3,
-                backgroundColor: c.border2,
-                color: c.blue,
-              ),
-              const SizedBox(height: 6),
-              Text('AI 處理中…', style: TextStyle(color: c.mute, fontSize: 11)),
-            ],
-            if (_error != null) ...[
-              const SizedBox(height: 12),
-              Text(
-                _error!,
-                style: const TextStyle(color: Color(0xFFE0777A), fontSize: 12),
-              ),
-            ],
-            if (_result != null) ...[
-              const SizedBox(height: 12),
-              Row(
-                children: [
-                  Text(
-                    '新增 $_addedCount 行・刪除 $_removedCount 行',
-                    style: TextStyle(color: c.dim, fontSize: 11.5),
-                  ),
-                  const Spacer(),
-                  GestureDetector(
-                    onTap: () => setState(() => _showDiff = !_showDiff),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+/// 自由交流 tab: multi-turn chat with streaming replies. History lives only
+/// for the lifetime of this sheet — reopening starts a fresh conversation.
+class _AiChatTab extends StatefulWidget {
+  final ValueChanged<String> onApply;
+
+  const _AiChatTab({required this.onApply});
+
+  @override
+  State<_AiChatTab> createState() => _AiChatTabState();
+}
+
+class _AiChatTabState extends State<_AiChatTab> {
+  final _messages = <({String role, String content})>[];
+  final _inputController = TextEditingController();
+  final _scrollController = ScrollController();
+  bool _busy = false;
+  String? _error;
+
+  @override
+  void dispose() {
+    _inputController.dispose();
+    _scrollController.dispose();
+    super.dispose();
+  }
+
+  void _scrollToBottom() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!_scrollController.hasClients) return;
+      _scrollController.animateTo(
+        _scrollController.position.maxScrollExtent,
+        duration: const Duration(milliseconds: 200),
+        curve: Curves.easeOut,
+      );
+    });
+  }
+
+  Future<void> _send() async {
+    final text = _inputController.text.trim();
+    if (text.isEmpty || _busy) return;
+    _inputController.clear();
+    setState(() {
+      _messages.add((role: 'user', content: text));
+      _busy = true;
+      _error = null;
+    });
+    _scrollToBottom();
+
+    try {
+      final useBuiltin = await LlmPrefs.useBuiltin;
+      final baseUrl = (await LlmPrefs.baseUrl)!;
+      final model = (await LlmPrefs.model)!;
+      final apiKey = useBuiltin ? null : await LlmPrefs.apiKey;
+      var reply = '';
+      final full = await LlmClient.completeStream(
+        baseUrl: baseUrl,
+        model: model,
+        apiKey: apiKey,
+        messages: List.of(_messages),
+        onDelta: (delta) {
+          reply += delta;
+          if (!mounted) return;
+          setState(() {
+            if (_messages.isNotEmpty && _messages.last.role == 'assistant') {
+              _messages[_messages.length - 1] = (
+                role: 'assistant',
+                content: reply,
+              );
+            } else {
+              _messages.add((role: 'assistant', content: reply));
+            }
+          });
+          _scrollToBottom();
+        },
+      );
+      if (!mounted) return;
+      setState(() {
+        if (_messages.isEmpty || _messages.last.role != 'assistant') {
+          _messages.add((role: 'assistant', content: full));
+        }
+      });
+    } on LlmException catch (e) {
+      if (mounted) setState(() => _error = e.message);
+    } catch (_) {
+      if (mounted) setState(() => _error = 'AI 處理失敗，再試一次看看 (´;ω;`)');
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final c = ItouColorsExt.of(context);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Expanded(
+          child: _messages.isEmpty && !_busy
+              ? Center(
+                  child: Padding(
+                    padding: const EdgeInsets.all(24),
                     child: Text(
-                      _showDiff ? '顯示原始文字' : '顯示差異',
-                      style: TextStyle(color: c.blue, fontSize: 12),
+                      '跟 AI 自由對話，例如：\n「幫我把這篇改成更口語的語氣」',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                        color: c.mute,
+                        fontSize: 12.5,
+                        height: 1.6,
+                      ),
                     ),
                   ),
-                ],
-              ),
-              const SizedBox(height: 6),
-              Container(
-                constraints: const BoxConstraints(maxHeight: 220),
-                padding: const EdgeInsets.all(10),
-                decoration: BoxDecoration(
-                  color: c.inset,
-                  border: Border.all(color: c.border),
-                ),
-                child: SingleChildScrollView(
-                  child: _showDiff
-                      ? (_diffHunks.isEmpty
-                            ? Text(
-                                '沒有變更',
-                                style: TextStyle(color: c.mute, fontSize: 12),
-                              )
-                            : DiffView(hunks: _diffHunks, c: c))
-                      : Text(
-                          _result!,
-                          style: TextStyle(
-                            color: c.text,
-                            fontSize: 12.5,
-                            height: 1.5,
+                )
+              : ListView.builder(
+                  controller: _scrollController,
+                  padding: const EdgeInsets.symmetric(vertical: 8),
+                  itemCount: _messages.length + (_error != null ? 1 : 0),
+                  itemBuilder: (context, index) {
+                    if (index >= _messages.length) {
+                      return Padding(
+                        padding: const EdgeInsets.only(top: 8),
+                        child: Text(
+                          _error!,
+                          style: const TextStyle(
+                            color: Color(0xFFE0777A),
+                            fontSize: 12,
                           ),
                         ),
+                      );
+                    }
+                    final message = _messages[index];
+                    return _ChatBubble(
+                      role: message.role,
+                      content: message.content,
+                      busy:
+                          _busy &&
+                          index == _messages.length - 1 &&
+                          message.role == 'assistant' &&
+                          message.content.isEmpty,
+                      onApply: message.role == 'assistant'
+                          ? () => widget.onApply(message.content)
+                          : null,
+                      c: c,
+                    );
+                  },
+                ),
+        ),
+        const SizedBox(height: 6),
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.end,
+          children: [
+            Expanded(
+              child: TextField(
+                controller: _inputController,
+                maxLines: 3,
+                minLines: 1,
+                textInputAction: TextInputAction.newline,
+                style: TextStyle(color: c.text, fontSize: 13),
+                decoration: InputDecoration(
+                  hintText: '輸入訊息…',
+                  hintStyle: TextStyle(color: c.mute, fontSize: 13),
+                  isDense: true,
+                  contentPadding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 10,
+                  ),
                 ),
               ),
-              const SizedBox(height: 12),
-              Row(
-                children: [
-                  Expanded(
-                    child: ElevatedButton(
-                      onPressed: () => Navigator.of(context).pop(),
-                      child: const Text('取消'),
-                    ),
-                  ),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    child: ElevatedButton(
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: c.blue,
-                        foregroundColor: Colors.white,
-                      ),
-                      onPressed: _apply,
-                      child: const Text('套用'),
-                    ),
-                  ),
-                ],
-              ),
-            ],
+            ),
+            const SizedBox(width: 8),
+            IconButton(
+              tooltip: '送出',
+              icon: Icon(Icons.send, size: 20, color: c.blue),
+              onPressed: _busy ? null : _send,
+            ),
           ],
         ),
+      ],
+    );
+  }
+}
+
+class _ChatBubble extends StatelessWidget {
+  final String role;
+  final String content;
+  final bool busy;
+  final VoidCallback? onApply;
+  final ItouColors c;
+
+  const _ChatBubble({
+    required this.role,
+    required this.content,
+    required this.busy,
+    required this.onApply,
+    required this.c,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final isUser = role == 'user';
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      child: Row(
+        mainAxisAlignment: isUser
+            ? MainAxisAlignment.end
+            : MainAxisAlignment.start,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Flexible(
+            child: Container(
+              constraints: const BoxConstraints(maxWidth: 420),
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              decoration: BoxDecoration(
+                color: isUser ? c.blue.withValues(alpha: 0.14) : c.inset,
+                border: Border.all(
+                  color: isUser ? c.blue.withValues(alpha: 0.35) : c.border,
+                ),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  if (busy)
+                    Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 4),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          SizedBox(
+                            width: 12,
+                            height: 12,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              color: c.blue,
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Text(
+                            'AI 思考中…',
+                            style: TextStyle(color: c.mute, fontSize: 11),
+                          ),
+                        ],
+                      ),
+                    ),
+                  SelectableText(
+                    content,
+                    style: TextStyle(
+                      color: c.text,
+                      fontSize: 12.5,
+                      height: 1.5,
+                    ),
+                  ),
+                  if (onApply != null) ...[
+                    const SizedBox(height: 4),
+                    GestureDetector(
+                      onTap: onApply,
+                      child: Text(
+                        '套用到編輯器',
+                        style: TextStyle(color: c.blue, fontSize: 11.5),
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }
