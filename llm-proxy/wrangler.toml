@@ -7,5 +7,9 @@ compatibility_date = "2026-08-03"
 # workers.dev URL and the app's builtin base URL simply stays broken.
 routes = [{ pattern = "llm.itousouta.me", custom_domain = true }]
 
+# Workers AI binding for the free-tier fallback model.
+[ai]
+binding = "AI"
+
 [observability]
 enabled = true
