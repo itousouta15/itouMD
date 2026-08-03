@@ -4,6 +4,8 @@ import 'package:url_launcher/url_launcher.dart';
 
 import '../services/hackmd_account.dart';
 import '../services/hackmd_api.dart';
+import '../services/github_account.dart';
+import '../services/github_api.dart';
 import '../services/llm_client.dart';
 import '../services/llm_prefs.dart';
 import '../services/note_cache.dart';
@@ -20,6 +22,7 @@ import '../widgets/loader_ring.dart';
 import '../widgets/reader_font_picker.dart';
 import '../widgets/update_dialog.dart';
 import 'hackmd_account_screen.dart';
+import 'github_account_screen.dart';
 import 'onboarding_screen.dart';
 import 'sync_history_screen.dart';
 
@@ -47,6 +50,7 @@ class SettingsScreen extends StatefulWidget {
 
 class _SettingsScreenState extends State<SettingsScreen> {
   HackmdUser? _user;
+  String? _githubUser;
   ReaderPrefs _readerPrefs = const ReaderPrefs();
   bool _autoRefresh = true;
   ConflictResolution _conflictResolution = ConflictResolution.ask;
@@ -100,6 +104,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
   Future<void> _loadAll() async {
     _loadAccount();
+    _loadGithubAccount();
     _loadLlmPrefs();
     final reader = await ReaderPrefs.load();
     final autoRefresh = await SyncPrefs.autoRefreshOnOpen;
@@ -150,6 +155,27 @@ class _SettingsScreenState extends State<SettingsScreen> {
       context,
     ).push(MaterialPageRoute(builder: (_) => const HackmdAccountScreen()));
     _loadAccount();
+  }
+
+  Future<void> _loadGithubAccount() async {
+    final token = await GithubAccount.getToken();
+    if (!mounted) return;
+    if (token == null || token.isEmpty) return;
+    try {
+      final login = await GithubApi.getAuthenticatedUser(token);
+      if (mounted) setState(() => _githubUser = login);
+    } on GithubApiException {
+      // Token stored but invalid — show as disconnected.
+    } catch (_) {
+      // Offline — don't clear the cached user state.
+    }
+  }
+
+  Future<void> _openGithubAccount() async {
+    await Navigator.of(
+      context,
+    ).push(MaterialPageRoute(builder: (_) => const GithubAccountScreen()));
+    _loadGithubAccount();
   }
 
   Future<void> _loadLlmPrefs() async {
@@ -541,6 +567,22 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 labelColor: _user != null ? c.text : c.dim,
                 trailing: Icon(Icons.chevron_right, size: 18, color: c.mute),
                 onTap: _openAccount,
+              ),
+            ],
+          ),
+          const SizedBox(height: 24),
+          const SectionLabel('GitHub 帳號'),
+          const SizedBox(height: 8),
+          _Panel(
+            children: [
+              _SettingRow(
+                icon: _githubUser != null
+                    ? Icons.cloud_done_outlined
+                    : Icons.cloud_off_outlined,
+                label: _githubUser != null ? '已連結：$_githubUser' : '尚未連結',
+                labelColor: _githubUser != null ? c.text : c.dim,
+                trailing: Icon(Icons.chevron_right, size: 18, color: c.mute),
+                onTap: _openGithubAccount,
               ),
             ],
           ),
