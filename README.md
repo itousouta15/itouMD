@@ -44,9 +44,23 @@
 - **同步紀錄**：本機保存最近 50 筆同步歷史（時間／筆記／合併或覆蓋）。
 - **離線快取**：瀏覽清單與筆記內容自動快取，離線時仍可閱讀並標示「離線版本」。
 
+### AI 助理
+
+- **快捷指令**：潤飾、翻譯成繁體中文／英文、縮寫、改寫、生成摘要、擴寫內容、整理成表格／清單、建議標題、改得更正式／口語、修正錯別字與格式——**13 個指令**，每個都有具體的提示詞模板；以選取文字為對象，沒有選取時套用整篇文件。
+- **差異預覽**：套用前先顯示增刪行數與逐行 diff（紅刪綠增），確定沒問題再套用。
+- **自由交流**：與 AI 進行多輪**串流**對話；每一輪都會注入整篇文件與目前選取內容，AI 真的知道你寫了什麼。任何回覆都可逐則「套用到編輯器」。
+- **多個入口**：編輯模式的 AppBar 按鈕、工具列上的醒目標示按鈕，以及選取文字選單裡的「AI 助理」。
+- **內建額度**：預設使用內建免費額度（經 `llm.itousouta.me` proxy 串流，DeepSeek 最便宜模型、每日配額有限），也可在設定改用自己的 OpenAI 相容端點＋API Key。
+
+### GitHub
+
+- **OAuth Device Flow 登入**：在 GitHub 上輸入裝置代碼即可完成授權，不用自己產生 Token（手動 PAT 保留為進階選項）。
+- **寫回 GitHub**：從 GitHub 網址（blob 頁面或 repo 首頁）開啟的文件，編輯完可直接寫回 repo；以檔案 SHA 偵測衝突並提供三方合併，同步後可復原。
+- **開啟 GitHub Repo**：首頁輸入 `owner/repo`（或貼完整網址）直接開啟該 repo 的 README；登入後也支援私有 repo。
+
 ### 其他
 
-- **精靈式首頁介紹**：首次啟動 4 頁引導；設定裡可隨時「重新查看介紹」。
+- **精靈式首頁介紹**：首次啟動 5 頁引導——3 頁介紹＋HackMD／GitHub **登入引導**（各顯示連線狀態，可跳過之後再連）；設定裡可隨時「重新查看介紹」。
 - **App 內更新**：啟動時自動檢查新版，設定裡可手動「檢查更新」；有新版本直接下載並安裝，不用另外找 APK。
 - **崩潰回報**：Sentry 自動收集 crash（DSN 由建置參數注入，不進版本庫）。
 - **最近開啟**：保存最近開啟的 Markdown（上限 5 筆）。
@@ -54,7 +68,7 @@
 ## 目標使用情境
 
 - 在手機上快速預覽、編輯 Markdown，不用開電腦。
-- 直接瀏覽並編輯 GitHub、Gist、HackMD 上的 Markdown 內容，編輯完一鍵同步回 HackMD。
+- 直接瀏覽並編輯 GitHub、Gist、HackMD 上的 Markdown 內容，編輯完一鍵同步回 HackMD 或寫回 GitHub。
 - 在其他裝置或網頁版改過同一篇筆記時，App 自動提醒並提供逐項合併，避免互相覆蓋。
 - 需要顯示 LaTeX 數學公式與程式碼語法高亮效果。
 - 把本機 Markdown 檔案當成輕量閱讀器／編輯器使用。
@@ -66,14 +80,15 @@ lib/
 ├── main.dart                          應用入口：Sentry、主題（跟隨系統／自訂主色背景）、介面字級、首頁／精靈介紹
 ├── theme.dart                         自訂應用主題與顏色樣式（主色／背景衍生邏輯）
 ├── screens/
-│   ├── home_screen.dart               首頁：新建、貼上、選檔、網址抓取、最近開啟、啟動靜默檢查更新
-│   ├── onboarding_screen.dart         首次啟動的精靈式介紹（4 頁引導）
-│   ├── viewer_screen.dart             檢視／編輯：渲染、行號編輯器、工具列、同步、衝突合併、復原、離線
+│   ├── home_screen.dart               首頁：新建、貼上、選檔、網址抓取、GitHub Repo 開啟、最近開啟、啟動靜默檢查更新
+│   ├── onboarding_screen.dart         首次啟動的精靈式介紹（5 頁：3 頁介紹＋帳號登入引導）
+│   ├── viewer_screen.dart             檢視／編輯：渲染、行號編輯器、工具列、同步、衝突合併、復原、離線、AI 助理
 │   ├── conflict_screen.dart           衝突合併畫面：差異檢視、逐項選擇、合併預覽
 │   ├── hackmd_notes_screen.dart       瀏覽個人與團隊筆記（可收合分類、離線快取）
 │   ├── hackmd_account_screen.dart     HackMD 帳號（API Token）設定
+│   ├── github_account_screen.dart     GitHub 帳號（OAuth Device Flow／PAT）設定
 │   ├── sync_history_screen.dart       同步紀錄列表
-│   └── settings_screen.dart           設定頁：外觀（主題／主題顏色）、閱讀偏好、同步、帳號、資料、更多、關於
+│   └── settings_screen.dart           設定頁：外觀（主題／主題顏色）、閱讀偏好、同步、帳號、AI 助理、資料、更多、關於
 ├── services/
 │   ├── markdown_renderer.dart         Markdown → HTML 轉換管線（isolate 執行）
 │   ├── markdown_source.dart           遠端 Markdown 擷取與 URL 正規化
@@ -82,18 +97,24 @@ lib/
 │   ├── hackmd_syntax.dart             HackMD 容器語法、`[TOC]` 展開
 │   ├── hackmd_api.dart                HackMD REST API 客戶端（含團隊端點、建立筆記）
 │   ├── hackmd_account.dart            HackMD API Token 安全儲存
+│   ├── github_api.dart                GitHub REST API 客戶端（contents 寫回）
+│   ├── github_account.dart            GitHub Token 安全儲存
+│   ├── github_oauth.dart              GitHub OAuth Device Flow
 │   ├── note_cache.dart                離線快取（筆記內容與瀏覽清單）
 │   ├── sync_history.dart              同步紀錄與復原槽（跨 session）
 │   ├── sync_prefs.dart                同步偏好（自動更新開關、衝突處理預設）
 │   ├── ui_prefs.dart                  介面字級設定
 │   ├── theme_prefs.dart               主題自訂設定（淺／深主色與背景）
 │   ├── custom_fonts.dart              匯入字型：檔案複製、FontLoader 註冊、啟動重放
+│   ├── llm_client.dart                OpenAI 相容聊天客戶端（SSE 串流）
+│   ├── llm_prefs.dart                 AI 助理設定（內建額度／自訂 API）
 │   ├── update_checker.dart            GitHub Releases 更新檢查與下載安裝
 │   ├── latex_preprocessor.dart        保護 LaTeX 公式避免被 Markdown 解析破壞
 │   ├── reader_prefs.dart              保存讀者偏好設定（含自訂顏色、匯入字型選項）
 │   └── recent_docs.dart               儲存與管理最近開啟紀錄
 └── widgets/
     ├── loader_ring.dart               載入動畫元件與 SectionLabel
+    ├── diff_view.dart                 共用逐行差異視圖（AI 差異預覽）
     ├── hsv_color_picker.dart          共用 HSV 自訂選色器（主題主色／背景、閱讀文字顏色）
     ├── reader_font_picker.dart        共用字體選單（內建字型＋匯入字型入口）
     └── update_dialog.dart             更新通知對話框（下載進度）
@@ -202,9 +223,9 @@ flutter build ios --release
 | `flutter_highlight` / `highlight` | 程式碼區塊語法高亮 |
 | `flutter_svg` | SVG 圖片渲染 |
 | `html` | HTML DOM 解析（自訂 widget builder 用） |
-| `http` | 網路請求（URL 擷取、HackMD API、更新檢查） |
+| `http` | 網路請求（URL 擷取、HackMD API、更新檢查、LLM） |
 | `file_picker` | 選擇本機檔案、另存新檔 |
-| `flutter_secure_storage` | HackMD API Token 安全儲存（Android Keystore／iOS Keychain） |
+| `flutter_secure_storage` | HackMD／GitHub Token 安全儲存（Android Keystore／iOS Keychain） |
 | `shared_preferences` | 偏好設定、最近開啟、離線快取、同步紀錄 |
 | `google_fonts` | 閱讀字體 |
 | `url_launcher` | 開啟外部連結 |
@@ -217,11 +238,11 @@ flutter build ios --release
 
 ### 首次啟動
 
-1. 第一次打開會看到 4 頁精靈式介紹，看完按「開始使用」，或右上角「跳過」。之後可在「設定 → 更多 → 重新查看介紹」再看一次。
+1. 第一次打開會看到 5 頁精靈式介紹——3 頁介紹＋HackMD／GitHub 登入引導（各頁顯示連線狀態，可先跳過之後再連），看完按「開始使用」，或右上角「跳過」。之後可在「設定 → 更多 → 重新查看介紹」再看一次。
 
 ### 基本操作
 
-2. 首頁點「建立新文件」輸入標題即可開始寫；也可直接「貼上文字」、選擇本機檔案，或貼入網址從 GitHub／Gist／HackMD 擷取內容。
+2. 首頁點「建立新文件」輸入標題即可開始寫；也可直接「貼上文字」、選擇本機檔案，或貼入網址從 GitHub／Gist／HackMD 擷取內容；還可以在「開啟 GitHub Repo」輸入 `owner/repo`（或貼完整網址）直接載入該 repo 的 README。
 3. 進入檢視頁面後，點右上角編輯圖示切換到編輯模式，左側會出現行號欄，畫面下方會出現格式工具列。
 4. 編輯完成後點「完成編輯」套用並重新渲染預覽，預覽會自動捲回剛才編輯的那一行；點「另存新檔」可存成 `.md` 檔案。
 5. 點程式碼區塊右上角圖示可複製整段程式碼；點文件中的圖片可全螢幕放大。
@@ -238,21 +259,36 @@ flutter build ios --release
 
 11. 首頁點「瀏覽我的 HackMD 筆記」，分類列表（個人筆記／各團隊）預設收起，點標題展開；下拉重新整理；離線時會顯示上次的快取並標示「離線資料」。
 
+### AI 助理
+
+12. 編輯模式點 AI 按鈕（AppBar 或工具列上的醒目標示），或選取文字後從選單選「AI 助理」。
+13. 「快捷指令」分頁提供 13 個一鍵指令（潤飾、翻譯、改寫、摘要等）；結果會先顯示增刪差異（diff）再套用，套用會替換選取文字（未選取時為整篇文件）。
+14. 「自由交流」分頁可與 AI 多輪串流對話；每一輪都知道整篇文件（與你的選取），例如「把選取的部分改得更口語」直接有效。任何回覆都可點「套用到編輯器」。
+15. AI 連線設定在「設定 → AI 助理」——內建免費額度（每日配額有限）或自訂 OpenAI 相容端點＋API Key，可在此測試連線。
+
+### GitHub
+
+16. 「設定 → GitHub 帳號 → 使用 GitHub 帳號登入」以 OAuth Device Flow 授權（在 github.com/login/device 輸入裝置代碼）；手動 PAT 仍可用。登入後可開啟私有 repo 的 README 並寫回。
+17. 從 github.com 網址（blob 頁面或 repo 首頁）開啟的文件，檢視頁面會出現「寫回 GitHub」按鈕；以檔案 SHA 偵測衝突，有變更時開啟三方合併畫面。
+
 ### 閱讀偏好與外觀
 
-12. 檢視頁面點「顯示設定」可即時調整字體（含**匯入自訂字型**，支援 `.ttf`／`.otf`）、字級、文字顏色（含自訂調色盤）。
-13. 「設定 → 外觀」可調整主題（**跟隨系統**／淺色／深色）與**主題顏色**——淺色、深色主題可分別設定主色（按鈕、連結等強調色）與背景色（「自動」會跟隨主色衍生同色系底色，或自訂；面板色系自動衍生、文字對比隨背景亮度調整）；介面字級（標準／大／特大）也在這裡。資料管理（清除最近開啟紀錄與離線快取）同在設定頁。
+18. 檢視頁面點「顯示設定」可即時調整字體（含**匯入自訂字型**，支援 `.ttf`／`.otf`）、字級、文字顏色（含自訂調色盤）。
+19. 「設定 → 外觀」可調整主題（**跟隨系統**／淺色／深色）與**主題顏色**——淺色、深色主題可分別設定主色（按鈕、連結等強調色）與背景色（「自動」會跟隨主色衍生同色系底色，或自訂；面板色系自動衍生、文字對比隨背景亮度調整）；介面字級（標準／大／特大）也在這裡。資料管理（清除最近開啟紀錄與離線快取）同在設定頁。
 
 ### App 內更新
 
-14. 有新版本時啟動會自動通知；也可在「設定 → 更多 → 檢查更新」手動確認。按下「下載並更新」後直接在 App 內下載並呼叫系統安裝器完成升級。
+20. 有新版本時啟動會自動通知；也可在「設定 → 更多 → 檢查更新」手動確認。按下「下載並更新」後直接在 App 內下載並呼叫系統安裝器完成升級。
 
 ## 開發備註
 
 - 遠端 URL 擷取會自動將常見 GitHub／Gist／HackMD 連結轉換為 raw／下載格式。
 - 最近開啟紀錄儲存在 `SharedPreferences`，最多保存 5 筆。
 - LaTeX 公式與 HackMD 圖片縮放語法（`![alt](url =50%x)`）會先經過預處理，避免被標準 Markdown 解析器誤判或忽略。
-- HackMD API Token 儲存在系統金鑰庫（Android Keystore／iOS Keychain），不會跟其他偏好設定混在一起。
+- HackMD API Token 儲存在系統金鑰庫（Android Keystore／iOS Keychain），不會跟其他偏好設定混在一起；GitHub Token 同樣由 `flutter_secure_storage` 保管。
+- GitHub 登入採用 OAuth Device Flow（`github_oauth.dart`）：畫面顯示裝置代碼與授權網址，App 輪詢授權狀態直到完成；OAuth client_id 內建於 App（可用 `--dart-define=GITHUB_OAUTH_CLIENT_ID=...` 覆寫，Device Flow 不需 client secret），手動 PAT 仍保留為進階選項。
+- GitHub 寫回以目標檔案的 SHA（Contents API）做衝突偵測：雲端在載入後被改過會要求先三方合併，成功寫回後可一鍵復原。
+- AI 串流走 SSE（`llm_client.dart` 解析 OpenAI 相容的 streaming chunk）；內建額度經 Cloudflare Worker proxy（`llm.itousouta.me`）轉送，proxy 包 SSE 且 OpenCode Zen 失效時自動切換 Workers AI 備援。自由交流每一輪都會把整篇文件與選取範圍透過 `extraSystem` 注入，讓模型理解上下文。
 - HackMD 團隊 API 使用的是 **team path**（`@teamname` 的 `teamname` 部分）而非 UUID——這是根據官方 [`hackmdio/api-client`](https://github.com/hackmdio/api-client) 確認的規格。
 - 衝突合併的 baseline 指的是「Viewer 載入時的原始內容」，不會被開啟時的自動更新覆蓋——即使重開筆記、自動拉到最新版，sync 時還是能比對出雲端在載入後發生的變更。合併演算法為自製 Myers diff＋三方合併（`markdown_diff.dart`，有單元測試覆蓋）。
 - 更新檢查以 GitHub `releases/latest` 為準，僅在遠端版本號嚴格大於本機時才提示。
