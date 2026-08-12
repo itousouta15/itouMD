@@ -50,3 +50,6 @@ app.*.map.json
 /android/key.properties
 *.jks
 *.keystore
+
+# Local Codex/agent instructions.
+AGENTS.md
