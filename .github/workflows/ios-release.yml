@@ -1,0 +1,125 @@
+name: iOS GitHub Release
+
+on:
+  push:
+    tags:
+      - "v*-ios.*"
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Existing iOS prerelease tag (for example v1.3.0-ios.1)
+        required: true
+        type: string
+
+concurrency:
+  group: ios-release-${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
+  cancel-in-progress: false
+
+env:
+  RELEASE_TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
+  DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+
+jobs:
+  build-ios:
+    name: Build unsigned IPA
+    runs-on: macos-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout release tag
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ env.RELEASE_TAG }}
+          fetch-depth: 0
+
+      - name: Validate tag and app version
+        shell: bash
+        run: |
+          app_version="$(sed -nE 's/^version: ([0-9]+\.[0-9]+\.[0-9]+)\+[0-9]+$/\1/p' pubspec.yaml)"
+          if [[ -z "$app_version" ]]; then
+            echo "Unable to read a semantic app version from pubspec.yaml." >&2
+            exit 1
+          fi
+          tag_pattern="^v${app_version//./\\.}-ios\\.[0-9]+$"
+          if [[ ! "$RELEASE_TAG" =~ $tag_pattern ]]; then
+            echo "Tag $RELEASE_TAG does not match app version $app_version." >&2
+            exit 1
+          fi
+          if ! git tag --points-at HEAD | grep -Fxq "$RELEASE_TAG"; then
+            echo "Checked-out commit is not tagged with $RELEASE_TAG." >&2
+            exit 1
+          fi
+          git fetch --no-tags origin "$DEFAULT_BRANCH"
+          if ! git merge-base --is-ancestor HEAD "origin/$DEFAULT_BRANCH"; then
+            echo "Tag $RELEASE_TAG is not reachable from $DEFAULT_BRANCH." >&2
+            exit 1
+          fi
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - name: Install dependencies
+        run: |
+          flutter clean
+          flutter pub get
+
+      - name: Build iOS without signing
+        run: flutter build ios --release --no-codesign
+
+      - name: Package unsigned IPA and checksum
+        shell: bash
+        run: |
+          ipa_path="build/release/itouMD-${RELEASE_TAG}-unsigned.ipa"
+          .github/scripts/package_unsigned_ipa.sh \
+            build/ios/iphoneos/Runner.app "$ipa_path"
+          cd build/release
+          shasum -a 256 "$(basename "$ipa_path")" > SHA256SUMS
+          shasum -a 256 -c SHA256SUMS
+
+      - name: Upload release candidate
+        uses: actions/upload-artifact@v4
+        with:
+          name: itouMD-${{ env.RELEASE_TAG }}-ios
+          path: build/release/
+          if-no-files-found: error
+          retention-days: 14
+          compression-level: 0
+
+  publish:
+    name: Publish GitHub prerelease
+    needs: build-ios
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+    steps:
+      - name: Download release candidate
+        uses: actions/download-artifact@v4
+        with:
+          name: itouMD-${{ env.RELEASE_TAG }}-ios
+          path: dist
+
+      - name: Create or update GitHub prerelease
+        shell: bash
+        run: |
+          notes='> [!IMPORTANT]
+          > The iOS asset is unsigned. It cannot be installed directly: re-sign it with your own Apple ID/team before sideloading. No Apple certificate or provisioning profile is included.
+
+          本次為 iOS 側載預覽版。請下載 `unsigned.ipa` 後以自己的 Apple ID／Team 重新簽章；Personal Team 簽章通常需要定期重新安裝。`SHA256SUMS` 可用於核對下載完整性。'
+
+          if gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
+            gh release upload "$RELEASE_TAG" dist/* --clobber
+          else
+            gh release create "$RELEASE_TAG" dist/* \
+              --verify-tag \
+              --title "itouMD $RELEASE_TAG (iOS preview)" \
+              --notes "$notes" \
+              --generate-notes \
+              --prerelease \
+              --latest=false
+          fi
