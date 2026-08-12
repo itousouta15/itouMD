@@ -89,7 +89,40 @@ Debug App 在 iOS 14 以上只能由 Flutter tooling、具 Flutter plugin 的 ID
 flutter run -d <device-id> --release --no-resident
 ```
 
-## 5. iOS smoke test
+## 5. GitHub Release iOS 預覽發布
+
+目前 repository 沒有 Apple distribution certificate／profile，也沒有可延續 Android 正式版的 keystore。為避免公開個人簽章材料，並避免只含 IPA 的新版本取代 Android 使用的 `releases/latest`，iOS 先以 GitHub **Prerelease** 發布無簽章 IPA：
+
+- Tag 格式為 `v<pubspec-version>-ios.<序號>`，例如 app `1.3.0+6` 對應 `v1.3.0-ios.1`。
+- `.github/workflows/ios-release.yml` 在 macOS runner 執行 `flutter build ios --release --no-codesign`，確認 App 不含 provisioning profile 且未簽章，再封裝為 `itouMD-<tag>-unsigned.ipa`。
+- Release 同時附 `SHA256SUMS`，並固定標為 Prerelease、`latest=false`。因此 Android 版的更新檢查仍停留在最近的穩定 Release。
+- IPA 只包含可重新簽章的 `Payload/Runner.app`；不得加入 Personal Team、development 或 distribution 憑證、私鑰及 provisioning profile。
+
+發布前先更新 `pubspec.yaml` 並完成 PR／CI。合併到 `master` 後建立 annotated tag：
+
+```bash
+git switch master
+git pull --ff-only
+git tag -a v1.3.0-ios.1 -m "iOS preview v1.3.0-ios.1"
+git push origin v1.3.0-ios.1
+```
+
+Tag push 會建置並建立 GitHub Prerelease。若發布 job 暫時失敗，可在 Actions 手動重跑 `iOS GitHub Release`，輸入同一個既存 tag；workflow 會覆寫同名資產。下載後核對：
+
+```bash
+shasum -a 256 -c SHA256SUMS
+unzip -l itouMD-v1.3.0-ios.1-unsigned.ipa | head
+```
+
+無簽章 IPA **不能直接安裝**。最可稽核的 Personal Team 測試方式仍是從原始碼以 Xcode／Flutter 建置；若使用 AltStore、Sideloadly 等第三方重簽工具，需自行確認工具來源，並以自己的 Apple ID／Team 簽章。免費 Personal Team profile 通常 7 天到期，之後必須重新簽章安裝。
+
+要升級為穩定 GitHub Release，至少先完成以下發布門檻：
+
+1. 找回 Android v1.2.2 使用的 keystore，並確認簽章 SHA-256 為 `40f5b5e6ebd8dda1b04f9a4399fac5cc0747cf8af69fe1d77918290955f34cdd`；把 keystore base64 與密碼放入 GitHub Actions secrets，不得提交檔案。
+2. 穩定 Release 必須同時附上可覆蓋升級的正式簽章 APK，否則 Android 端會偵測到新版卻無法下載。
+3. 若要提供不需使用者自行重簽的 iOS 發布，加入 Apple Developer Program，改用 TestFlight／App Store，或使用包含已登錄裝置的 Ad Hoc distribution profile；Personal Team 不可作為公開通用 IPA。
+
+## 6. iOS smoke test
 
 每次 iOS 平台或相依變更至少確認：
 
@@ -103,7 +136,7 @@ flutter run -d <device-id> --release --no-resident
 - 發現新版時，iOS 只開啟 GitHub release page，不嘗試下載或安裝 APK。
 - App 刪除重裝、背景切回、網路中斷恢復後行為合理。
 
-## 6. 驗證結果紀錄格式
+## 7. 驗證結果紀錄格式
 
 每次測試在 PR 或交付說明記錄：
 
