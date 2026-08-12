@@ -1,5 +1,7 @@
 # 開發備忘
 
+iOS 的工具鏈、模擬器與實機側載流程請見 [`docs/IOS_DEVELOPMENT.md`](docs/IOS_DEVELOPMENT.md)。
+
 ## 模擬器：用 `Pixel_9_std`，不要用 `Pixel_9`
 
 - `Pixel_9`：用的是 Google 較新的「16k page size」實驗性系統映像，這台的 SurfaceView 同步機制有 bug，畫面會整個黑屏
