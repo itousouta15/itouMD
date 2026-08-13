@@ -60,7 +60,7 @@ A modern Markdown viewer and editor for mobile devices, deeply integrated with H
 ### Other
 
 - **Onboarding wizard**: 5 pages on first launch — 3 intro pages plus guided **HackMD and GitHub sign-in** (with connection status); can be replayed any time from Settings → More → Replay intro.
-- **In-app updates**: checks for new versions on startup (and manually via Settings → More → Check for updates); downloads and installs in place — no hunting for APKs.
+- **In-app updates**: checks for new versions on startup (and manually via Settings → More → Check for updates); Android downloads the APK for system installation, while iOS opens the GitHub Release page.
 - **Crash reporting**: Sentry collects crashes (DSN injected at build time, never committed).
 - **Recents**: last 5 opened documents kept for quick access.
 
@@ -71,6 +71,12 @@ A modern Markdown viewer and editor for mobile devices, deeply integrated with H
 - When the same note was edited elsewhere (another device or the web), the app warns you and lets you merge change-by-change instead of silently overwriting.
 - Reading documents with LaTeX math and syntax-highlighted code.
 - Using local Markdown files as a lightweight reader / editor.
+
+## Downloads and Installation
+
+- **Android**: download the release-signed APK from the [Latest Release](https://github.com/itousouta15/itouMD/releases/latest). Updates must keep the same signing key to install over an existing version.
+- **iOS/iPadOS preview**: GitHub Prereleases contain an unsigned asset whose filename ends in `unsigned.ipa`. It cannot be installed directly; re-sign it with your own Apple ID/team first. A free Personal Team profile expires periodically and is suitable for personal testing, not App Store, TestFlight, or public Ad Hoc distribution.
+- After downloading the IPA and `SHA256SUMS`, run `shasum -a 256 -c SHA256SUMS` to verify integrity. See [`docs/IOS_DEVELOPMENT.md`](docs/IOS_DEVELOPMENT.md#5-github-release-ios-預覽發布) for signing constraints and the release workflow.
 
 ## Project Structure
 
