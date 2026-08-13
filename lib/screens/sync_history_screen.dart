@@ -96,7 +96,7 @@ class _SyncHistoryScreenState extends State<SyncHistoryScreen> {
                             ? Icons.merge_outlined
                             : Icons.cloud_upload_outlined,
                         size: 18,
-                        color: merged ? const Color(0xFF7FAE83) : c.blue,
+                        color: merged ? ItouColors.success : c.blue,
                       ),
                       const SizedBox(width: 12),
                       Expanded(

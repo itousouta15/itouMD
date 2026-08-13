@@ -2,6 +2,8 @@ import 'dart:convert';
 
 import 'package:http/http.dart' as http;
 
+import 'api_client.dart';
+
 class GithubApiException implements Exception {
   final String message;
   final int? statusCode;
@@ -58,13 +60,7 @@ class GithubApi {
   };
 
   static String _errorMessage(http.Response res) {
-    String? detail;
-    try {
-      final json = jsonDecode(utf8.decode(res.bodyBytes));
-      if (json is Map && json['message'] is String) {
-        detail = json['message'] as String;
-      }
-    } catch (_) {}
+    final detail = apiErrorDetail(res);
     final base = switch (res.statusCode) {
       401 => 'Token 無效或已過期，請重新設定 (´;ω;`)',
       403 => '沒有這個 repo 的寫入權限（或配額限制）(´;ω;`)',
@@ -78,14 +74,10 @@ class GithubApi {
 
   static Future<http.Response> _request(
     Future<http.Response> Function() send,
-  ) async {
-    final http.Response res;
-    try {
-      res = await send().timeout(const Duration(seconds: 20));
-    } catch (_) {
+  ) {
+    return runApiRequest(send, const Duration(seconds: 20), () {
       throw GithubApiException('連不到 GitHub，檢查網路連線 (´;ω;`)');
-    }
-    return res;
+    });
   }
 
   /// Parses a `github.com` URL into repo coordinates. Supports the blob

@@ -140,10 +140,19 @@ class UpdateChecker {
 
   /// Hands the downloaded APK to the system installer. Throws when the
   /// installer can't be launched (permission, no handler, ...).
+  ///
+  /// Once the installer activity is launched it holds its own file handle
+  /// (via the FileProvider content:// URI), so deleting our copy right
+  /// after is safe and keeps last update's APK from lingering in cache.
   static Future<void> installApk(File file) async {
     final result = await OpenFilex.open(file.path);
     if (result.type != ResultType.done) {
       throw Exception(result.message);
+    }
+    try {
+      if (file.existsSync()) await file.delete();
+    } catch (_) {
+      // Best effort — the next download overwrites it anyway.
     }
   }
 }

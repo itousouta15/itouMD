@@ -157,7 +157,7 @@ class _HackmdAccountScreenState extends State<HackmdAccountScreen> {
               const SizedBox(height: 12),
               Text(
                 _error!,
-                style: const TextStyle(color: Color(0xFFE0777A), fontSize: 13),
+                style: const TextStyle(color: ItouColors.danger, fontSize: 13),
               ),
             ],
             const SizedBox(height: 20),
