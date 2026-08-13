@@ -2,6 +2,8 @@ import 'dart:convert';
 
 import 'package:http/http.dart' as http;
 
+import 'api_client.dart';
+
 class HackmdApiException implements Exception {
   final String message;
   final int? statusCode;
@@ -128,15 +130,15 @@ class HackmdApi {
     }
   }
 
-  static Future<HackmdUser> getMe(String token) async {
-    final http.Response res;
-    try {
-      res = await http
-          .get(Uri.parse('$_base/me'), headers: _headers(token))
-          .timeout(const Duration(seconds: 15));
-    } catch (_) {
+  static Never _networkError() =>
       throw HackmdApiException('連不到 HackMD，檢查網路連線 (´;ω;`)');
-    }
+
+  static Future<HackmdUser> getMe(String token) async {
+    final res = await runApiRequest(
+      () => http.get(Uri.parse('$_base/me'), headers: _headers(token)),
+      const Duration(seconds: 15),
+      _networkError,
+    );
     if (res.statusCode != 200) {
       throw HackmdApiException(_errorMessage(res), res.statusCode);
     }
@@ -146,14 +148,11 @@ class HackmdApi {
   }
 
   static Future<List<HackmdNote>> listNotes(String token) async {
-    final http.Response res;
-    try {
-      res = await http
-          .get(Uri.parse('$_base/notes'), headers: _headers(token))
-          .timeout(const Duration(seconds: 20));
-    } catch (_) {
-      throw HackmdApiException('連不到 HackMD，檢查網路連線 (´;ω;`)');
-    }
+    final res = await runApiRequest(
+      () => http.get(Uri.parse('$_base/notes'), headers: _headers(token)),
+      const Duration(seconds: 20),
+      _networkError,
+    );
     if (res.statusCode != 200) {
       throw HackmdApiException(_errorMessage(res), res.statusCode);
     }
@@ -201,14 +200,11 @@ class HackmdApi {
   }
 
   static Future<http.Response> _get(String path, String token) async {
-    final http.Response res;
-    try {
-      res = await http
-          .get(Uri.parse(path), headers: _headers(token))
-          .timeout(const Duration(seconds: 20));
-    } catch (_) {
-      throw HackmdApiException('連不到 HackMD，檢查網路連線 (´;ω;`)');
-    }
+    final res = await runApiRequest(
+      () => http.get(Uri.parse(path), headers: _headers(token)),
+      const Duration(seconds: 20),
+      _networkError,
+    );
     if (res.statusCode != 200) {
       throw HackmdApiException(_errorMessage(res), res.statusCode);
     }
@@ -220,18 +216,15 @@ class HackmdApi {
     String token,
     String content,
   ) async {
-    final http.Response res;
-    try {
-      res = await http
-          .patch(
-            Uri.parse(path),
-            headers: _headers(token),
-            body: jsonEncode({'content': content}),
-          )
-          .timeout(const Duration(seconds: 20));
-    } catch (_) {
-      throw HackmdApiException('連不到 HackMD，檢查網路連線 (´;ω;`)');
-    }
+    final res = await runApiRequest(
+      () => http.patch(
+        Uri.parse(path),
+        headers: _headers(token),
+        body: jsonEncode({'content': content}),
+      ),
+      const Duration(seconds: 20),
+      _networkError,
+    );
     if (res.statusCode != 200 && res.statusCode != 202) {
       throw HackmdApiException(_errorMessage(res), res.statusCode);
     }
@@ -263,22 +256,19 @@ class HackmdApi {
     String readPermission = 'owner',
     String writePermission = 'owner',
   }) async {
-    final http.Response res;
-    try {
-      res = await http
-          .post(
-            Uri.parse('$_base/notes'),
-            headers: _headers(token),
-            body: jsonEncode({
-              'content': content,
-              'readPermission': readPermission,
-              'writePermission': writePermission,
-            }),
-          )
-          .timeout(const Duration(seconds: 20));
-    } catch (_) {
-      throw HackmdApiException('連不到 HackMD，檢查網路連線 (´;ω;`)');
-    }
+    final res = await runApiRequest(
+      () => http.post(
+        Uri.parse('$_base/notes'),
+        headers: _headers(token),
+        body: jsonEncode({
+          'content': content,
+          'readPermission': readPermission,
+          'writePermission': writePermission,
+        }),
+      ),
+      const Duration(seconds: 20),
+      _networkError,
+    );
     if (res.statusCode != 200 && res.statusCode != 201) {
       throw HackmdApiException(_errorMessage(res), res.statusCode);
     }
@@ -294,22 +284,19 @@ class HackmdApi {
     String readPermission = 'owner',
     String writePermission = 'owner',
   }) async {
-    final http.Response res;
-    try {
-      res = await http
-          .post(
-            Uri.parse('$_base/teams/$teamPath/notes'),
-            headers: _headers(token),
-            body: jsonEncode({
-              'content': content,
-              'readPermission': readPermission,
-              'writePermission': writePermission,
-            }),
-          )
-          .timeout(const Duration(seconds: 20));
-    } catch (_) {
-      throw HackmdApiException('連不到 HackMD，檢查網路連線 (´;ω;`)');
-    }
+    final res = await runApiRequest(
+      () => http.post(
+        Uri.parse('$_base/teams/$teamPath/notes'),
+        headers: _headers(token),
+        body: jsonEncode({
+          'content': content,
+          'readPermission': readPermission,
+          'writePermission': writePermission,
+        }),
+      ),
+      const Duration(seconds: 20),
+      _networkError,
+    );
     if (res.statusCode != 200 && res.statusCode != 201) {
       throw HackmdApiException(_errorMessage(res), res.statusCode);
     }

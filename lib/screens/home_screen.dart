@@ -414,13 +414,13 @@ class _HomeScreenState extends State<HomeScreen> {
                         padding: const EdgeInsets.all(12),
                         decoration: BoxDecoration(
                           color: c.panel,
-                          border: Border.all(color: const Color(0xFFE0777A)),
+                          border: Border.all(color: ItouColors.danger),
                         ),
                         child: Row(
                           children: [
                             const Icon(
                               Icons.error_outline,
-                              color: Color(0xFFE0777A),
+                              color: ItouColors.danger,
                               size: 16,
                             ),
                             const SizedBox(width: 8),
@@ -428,7 +428,7 @@ class _HomeScreenState extends State<HomeScreen> {
                               child: Text(
                                 _error!,
                                 style: const TextStyle(
-                                  color: Color(0xFFE0777A),
+                                  color: ItouColors.danger,
                                   fontSize: 13,
                                 ),
                               ),

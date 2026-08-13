@@ -267,20 +267,20 @@ class _HackmdNotesScreenState extends State<HackmdNotesScreen> {
               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
               decoration: BoxDecoration(
                 color: c.panel,
-                border: Border.all(color: const Color(0xFFAD8B5C)),
+                border: Border.all(color: ItouColors.warning),
               ),
               child: const Row(
                 children: [
                   Icon(
                     Icons.cloud_off_outlined,
                     size: 16,
-                    color: Color(0xFFAD8B5C),
+                    color: ItouColors.warning,
                   ),
                   SizedBox(width: 8),
                   Expanded(
                     child: Text(
                       '離線資料（上次成功更新的內容）',
-                      style: TextStyle(color: Color(0xFFAD8B5C), fontSize: 12),
+                      style: TextStyle(color: ItouColors.warning, fontSize: 12),
                     ),
                   ),
                 ],
@@ -504,7 +504,7 @@ class _ErrorPanel extends StatelessWidget {
               Text(
                 error,
                 textAlign: TextAlign.center,
-                style: const TextStyle(color: Color(0xFFE0777A), fontSize: 13),
+                style: const TextStyle(color: ItouColors.danger, fontSize: 13),
               ),
               const SizedBox(height: 16),
               ElevatedButton(
@@ -529,7 +529,7 @@ class _ErrorPanel extends StatelessWidget {
             Text(
               error,
               textAlign: TextAlign.center,
-              style: const TextStyle(color: Color(0xFFE0777A), fontSize: 13),
+              style: const TextStyle(color: ItouColors.danger, fontSize: 13),
             ),
             const SizedBox(height: 16),
             OutlinedButton(onPressed: onRetry, child: const Text('重試')),
