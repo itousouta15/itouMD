@@ -109,7 +109,13 @@ class GithubOAuth {
             )
             .timeout(const Duration(seconds: 20));
       } catch (_) {
-        throw GithubOAuthException('連不到 GitHub，檢查網路連線 (´;ω;`)');
+        // A single failed request (a transient blip, or the OS throttling
+        // background network while the user is off in the browser
+        // approving) isn't fatal — keep polling like `authorization_pending`
+        // instead of aborting the whole 15-minute window. If the network is
+        // genuinely down for the whole window, the deadline below still
+        // surfaces as a timeout.
+        continue;
       }
       if (res.statusCode != 200) {
         throw GithubOAuthException(_error(res));
