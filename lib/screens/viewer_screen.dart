@@ -16,6 +16,7 @@ import 'package:url_launcher/url_launcher.dart';
 
 import '../services/github_account.dart';
 import '../services/github_api.dart';
+import '../services/github_link_rewriter.dart';
 import '../services/hackmd_account.dart';
 import '../services/hackmd_api.dart';
 import '../services/markdown_editor_actions.dart';
@@ -53,12 +54,18 @@ class ViewerScreen extends StatefulWidget {
   final RecentDocSource source;
   final String? sourceRef;
 
+  /// Where this content was fetched from within a GitHub repo, if it was —
+  /// used to resolve the relative links/images inside it into absolute
+  /// GitHub URLs. `null` for anything not opened via [GithubApi].
+  final GithubLinkContext? githubLinkContext;
+
   const ViewerScreen({
     super.key,
     required this.title,
     required this.content,
     this.source = RecentDocSource.paste,
     this.sourceRef,
+    this.githubLinkContext,
   });
 
   @override
@@ -287,7 +294,9 @@ class _ViewerScreenState extends State<ViewerScreen> {
     _html = null;
     compute(convertMarkdownToHtml, markdown).then((html) {
       if (!mounted) return;
-      setState(() => _html = html);
+      final ctx = widget.githubLinkContext;
+      final rendered = ctx == null ? html : rewriteGithubRelativeLinks(html, ctx);
+      setState(() => _html = rendered);
       // Land the reader on the line that was being edited. Rendered block
       // heights vary (images, LaTeX, code), so this is an approximate
       // position by line fraction — close enough to find your place.

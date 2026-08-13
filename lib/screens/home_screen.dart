@@ -7,6 +7,7 @@ import 'package:url_launcher/url_launcher.dart';
 
 import '../services/github_account.dart';
 import '../services/github_api.dart';
+import '../services/github_link_rewriter.dart';
 import '../services/hackmd_account.dart';
 import '../services/hackmd_api.dart';
 import '../services/markdown_source.dart';
@@ -93,6 +94,7 @@ class _HomeScreenState extends State<HomeScreen> {
     String content, {
     RecentDocSource source = RecentDocSource.paste,
     String? sourceRef,
+    GithubLinkContext? githubLinkContext,
   }) async {
     if (content.trim().isEmpty) {
       setState(() => _error = '內容是空的喔 (´;ω;`)');
@@ -117,6 +119,7 @@ class _HomeScreenState extends State<HomeScreen> {
           content: content,
           source: source,
           sourceRef: sourceRef,
+          githubLinkContext: githubLinkContext,
         ),
       ),
     );
@@ -209,6 +212,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
       String content;
       String title;
+      GithubLinkContext? linkContext;
       final token = await GithubAccount.getToken();
       if (ref.branch.isEmpty && ref.path == 'README.md') {
         // A bare repo URL (no explicit file) — use the dedicated readme
@@ -218,10 +222,12 @@ class _HomeScreenState extends State<HomeScreen> {
         final file = await GithubApi.getReadme(ref, token: token);
         content = file.content;
         title = ref.displayName;
+        linkContext = GithubLinkContext.fromFile(ref.owner, ref.repo, file);
       } else if (token != null && token.isNotEmpty) {
         final file = await GithubApi.getFile(token, ref);
         content = file.content;
         title = ref.displayName;
+        linkContext = GithubLinkContext.fromFile(ref.owner, ref.repo, file);
       } else {
         content = await fetchMarkdownFromUrl(url);
         title = extractDocTitle(content) ?? ref.displayName;
@@ -232,6 +238,7 @@ class _HomeScreenState extends State<HomeScreen> {
         content,
         source: RecentDocSource.url,
         sourceRef: url,
+        githubLinkContext: linkContext,
       );
     } on MarkdownFetchException catch (e) {
       if (mounted) setState(() => _error = e.message);
