@@ -377,18 +377,13 @@ class _DeviceCodeDialogState extends State<_DeviceCodeDialog> {
                     ),
                   ),
                   const SizedBox(width: 10),
-                  Text(
-                    '等待授權…',
-                    style: TextStyle(color: c.mute, fontSize: 12),
-                  ),
+                  Text('等待授權…', style: TextStyle(color: c.mute, fontSize: 12)),
                 ],
               ),
           ],
         ),
       ),
-      actions: [
-        TextButton(onPressed: _cancel, child: const Text('取消')),
-      ],
+      actions: [TextButton(onPressed: _cancel, child: const Text('取消'))],
     );
   }
 }

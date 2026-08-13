@@ -825,4 +825,3 @@ String _themeModeLabel(ThemeMode mode) => switch (mode) {
   ThemeMode.dark => '深色',
   ThemeMode.system => '跟隨系統',
 };
-
