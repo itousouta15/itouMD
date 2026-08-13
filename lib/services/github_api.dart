@@ -72,9 +72,7 @@ class GithubApi {
     return base;
   }
 
-  static Future<http.Response> _request(
-    Future<http.Response> Function() send,
-  ) {
+  static Future<http.Response> _request(Future<http.Response> Function() send) {
     return runApiRequest(send, const Duration(seconds: 20), () {
       throw GithubApiException('連不到 GitHub，檢查網路連線 (´;ω;`)');
     });
