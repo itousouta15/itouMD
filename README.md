@@ -75,7 +75,7 @@
 
 ## 下載與安裝
 
-- **Android**：從 [Latest Release](https://github.com/itousouta15/itouMD/releases/latest) 下載正式簽章 APK；新版必須延續相同簽章才能覆蓋安裝。
+- **Android**：從 [Latest Release](https://github.com/itousouta15/itouMD/releases/latest) 下載正式簽章 APK；新版必須延續相同簽章才能覆蓋安裝。每個版本會依 CPU 架構拆成多個 APK（`arm64-v8a`／`armeabi-v7a`／`x86_64`），單一 APK 不再包含所有架構，檔案小很多；絕大多數 2017 年後的手機都是 `arm64-v8a`。App 內「檢查更新」會自動抓對應架構的檔案，手動下載才需要自己挑檔名。
 - **iOS／iPadOS 預覽**：GitHub Prerelease 提供檔名含 `unsigned.ipa` 的無簽章產物，必須先以自己的 Apple ID／Team 重新簽章，不能直接點擊安裝。免費 Personal Team 的 provisioning profile 會定期到期，適合個人測試，不等同 App Store、TestFlight 或公開 Ad Hoc 發布。
 - 下載 IPA 與 `SHA256SUMS` 後可執行 `shasum -a 256 -c SHA256SUMS` 核對完整性。詳細限制、重簽方式與發布流程見 [`docs/IOS_DEVELOPMENT.md`](docs/IOS_DEVELOPMENT.md#5-github-release-ios-預覽發布)。
 
@@ -197,8 +197,8 @@ flutter test
 ### 8.（選用）建置發布版本
 
 ```bash
-# Android APK（沒有設定 android/key.properties 時會退回 debug 簽章）
-flutter build apk --release
+# Android APK，依 CPU 架構拆成多個檔案（沒有設定 android/key.properties 時會退回 debug 簽章）
+flutter build apk --release --split-per-abi
 
 # iOS（需 macOS，簽名設定需在 Xcode 完成）
 flutter build ios --release
