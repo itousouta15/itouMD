@@ -135,24 +135,55 @@ class UpdateChecker {
     } finally {
       await sink.close();
     }
+
+    // A dropped connection can end the stream "cleanly" (no thrown error)
+    // while still leaving a truncated file — Android's installer then
+    // rejects it with an opaque "problem parsing the package" instead of
+    // this surfacing as a download failure. Catch both a short read and a
+    // response that isn't actually a ZIP (an HTML error/interstitial page
+    // slipping through with an HTTP 200) before handing the file off.
+    if (total != null && total > 0 && received != total) {
+      await file.delete();
+      throw Exception('下載不完整（$received/$total bytes）');
+    }
+    if (!await _looksLikeApk(file)) {
+      await file.delete();
+      throw Exception('下載到的檔案格式不正確');
+    }
     return file;
+  }
+
+  /// APKs are ZIP files, which always start with the local-file-header
+  /// signature `PK\x03\x04` — a cheap sanity check.
+  static Future<bool> _looksLikeApk(File file) async {
+    final raf = await file.open();
+    try {
+      final head = await raf.read(4);
+      return head.length == 4 &&
+          head[0] == 0x50 &&
+          head[1] == 0x4B &&
+          head[2] == 0x03 &&
+          head[3] == 0x04;
+    } finally {
+      await raf.close();
+    }
   }
 
   /// Hands the downloaded APK to the system installer. Throws when the
   /// installer can't be launched (permission, no handler, ...).
   ///
-  /// Once the installer activity is launched it holds its own file handle
-  /// (via the FileProvider content:// URI), so deleting our copy right
-  /// after is safe and keeps last update's APK from lingering in cache.
+  /// Does *not* delete the file afterwards: `OpenFilex.open` only confirms
+  /// the install Activity was launched, not that it has finished reading
+  /// the file — the system installer reads it asynchronously, in its own
+  /// process, via our FileProvider content:// URI. Deleting immediately
+  /// after used to race that read and could hand the installer a
+  /// disappearing/truncated file (surfacing as Android's opaque "problem
+  /// parsing the package"). [downloadApk] already clears any leftover file
+  /// before starting the next download, so nothing accumulates.
   static Future<void> installApk(File file) async {
     final result = await OpenFilex.open(file.path);
     if (result.type != ResultType.done) {
       throw Exception(result.message);
-    }
-    try {
-      if (file.existsSync()) await file.delete();
-    } catch (_) {
-      // Best effort — the next download overwrites it anyway.
     }
   }
 }
