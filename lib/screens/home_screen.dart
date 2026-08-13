@@ -17,6 +17,8 @@ import '../services/update_checker.dart';
 import '../theme.dart';
 import '../widgets/loader_ring.dart';
 import '../widgets/update_dialog.dart';
+import 'github_account_screen.dart';
+import 'github_repo_picker_screen.dart';
 import 'hackmd_account_screen.dart';
 import 'hackmd_notes_screen.dart';
 import 'settings_screen.dart';
@@ -208,7 +210,15 @@ class _HomeScreenState extends State<HomeScreen> {
       String content;
       String title;
       final token = await GithubAccount.getToken();
-      if (token != null && token.isNotEmpty) {
+      if (ref.branch.isEmpty && ref.path == 'README.md') {
+        // A bare repo URL (no explicit file) — use the dedicated readme
+        // endpoint, which resolves the actual filename itself instead of
+        // guessing "README.md" and 404ing on repos using a different case
+        // (readme.md, Readme.md, ...). Works without a token too.
+        final file = await GithubApi.getReadme(ref, token: token);
+        content = file.content;
+        title = ref.displayName;
+      } else if (token != null && token.isNotEmpty) {
         final file = await GithubApi.getFile(token, ref);
         content = file.content;
         title = ref.displayName;
@@ -232,6 +242,25 @@ class _HomeScreenState extends State<HomeScreen> {
     } finally {
       if (mounted) setState(() => _busy = false);
     }
+  }
+
+  /// Browses the linked account's repos instead of typing `owner/repo` by
+  /// hand. Prompts to connect an account first if none is linked yet.
+  Future<void> _pickGithubRepo() async {
+    final token = await GithubAccount.getToken();
+    if (!mounted) return;
+    if (token == null || token.isEmpty) {
+      await Navigator.of(
+        context,
+      ).push(MaterialPageRoute(builder: (_) => const GithubAccountScreen()));
+      return;
+    }
+    final picked = await Navigator.of(context).push<String>(
+      MaterialPageRoute(builder: (_) => GithubRepoPickerScreen(token: token)),
+    );
+    if (picked == null || !mounted) return;
+    _githubRepoController.text = picked;
+    _openGithubRepo();
   }
 
   Future<void> _fetchUrl() async {
@@ -547,9 +576,17 @@ class _HomeScreenState extends State<HomeScreen> {
                             controller: _githubRepoController,
                             keyboardType: TextInputType.url,
                             style: TextStyle(color: c.text, fontSize: 13.5),
-                            decoration: const InputDecoration(
+                            decoration: InputDecoration(
                               hintText: 'itousouta15/itouMD 或貼完整網址',
                               border: InputBorder.none,
+                              suffixIcon: IconButton(
+                                tooltip: '瀏覽我的 Repo',
+                                icon: const Icon(
+                                  Icons.list_alt_outlined,
+                                  size: 20,
+                                ),
+                                onPressed: _busy ? null : _pickGithubRepo,
+                              ),
                             ),
                           ),
                           const SizedBox(height: 12),
