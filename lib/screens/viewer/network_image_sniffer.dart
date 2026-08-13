@@ -21,7 +21,11 @@ class SvgAwareWidgetFactory extends WidgetFactory with SvgFactory {
     final url = src.url;
     Widget? base;
     if (url.startsWith('http://') || url.startsWith('https://')) {
-      base = SniffedNetworkImage(url: url, width: src.width, height: src.height);
+      base = SniffedNetworkImage(
+        url: url,
+        width: src.width,
+        height: src.height,
+      );
     } else {
       base = super.buildImageWidget(meta, src);
     }
@@ -49,7 +53,12 @@ class SniffedNetworkImage extends StatefulWidget {
   final double? width;
   final double? height;
 
-  const SniffedNetworkImage({super.key, required this.url, this.width, this.height});
+  const SniffedNetworkImage({
+    super.key,
+    required this.url,
+    this.width,
+    this.height,
+  });
 
   @override
   State<SniffedNetworkImage> createState() => _SniffedNetworkImageState();
