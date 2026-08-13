@@ -61,7 +61,7 @@
 ### 其他
 
 - **精靈式首頁介紹**：首次啟動 5 頁引導——3 頁介紹＋HackMD／GitHub **登入引導**（各顯示連線狀態，可跳過之後再連）；設定裡可隨時「重新查看介紹」。
-- **App 內更新**：啟動時自動檢查新版，設定裡可手動「檢查更新」；有新版本直接下載並安裝，不用另外找 APK。
+- **App 內更新**：啟動時自動檢查新版，設定裡可手動「檢查更新」；Android 可下載 APK 並交由系統安裝，iOS 則開啟 GitHub Release 頁面。
 - **崩潰回報**：Sentry 自動收集 crash（DSN 由建置參數注入，不進版本庫）。
 - **最近開啟**：保存最近開啟的 Markdown（上限 5 筆）。
 
@@ -72,6 +72,12 @@
 - 在其他裝置或網頁版改過同一篇筆記時，App 自動提醒並提供逐項合併，避免互相覆蓋。
 - 需要顯示 LaTeX 數學公式與程式碼語法高亮效果。
 - 把本機 Markdown 檔案當成輕量閱讀器／編輯器使用。
+
+## 下載與安裝
+
+- **Android**：從 [Latest Release](https://github.com/itousouta15/itouMD/releases/latest) 下載正式簽章 APK；新版必須延續相同簽章才能覆蓋安裝。
+- **iOS／iPadOS 預覽**：GitHub Prerelease 提供檔名含 `unsigned.ipa` 的無簽章產物，必須先以自己的 Apple ID／Team 重新簽章，不能直接點擊安裝。免費 Personal Team 的 provisioning profile 會定期到期，適合個人測試，不等同 App Store、TestFlight 或公開 Ad Hoc 發布。
+- 下載 IPA 與 `SHA256SUMS` 後可執行 `shasum -a 256 -c SHA256SUMS` 核對完整性。詳細限制、重簽方式與發布流程見 [`docs/IOS_DEVELOPMENT.md`](docs/IOS_DEVELOPMENT.md#5-github-release-ios-預覽發布)。
 
 ## 專案架構
 
