@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../services/github_account.dart';
@@ -102,88 +103,14 @@ class _GithubAccountScreenState extends State<GithubAccountScreen> {
     }
   }
 
-  /// Shows the device code in a dialog, launches the verification page, and
-  /// polls until the user authorizes. Returns the access token, or null if
-  /// the dialog was dismissed.
-  Future<String?> _showDeviceCodeDialog(GithubOAuthSession session) async {
-    var cancelled = false;
+  /// Shows the device code in a dialog and polls until the user authorizes.
+  /// Returns the access token, or null if the dialog was cancelled.
+  Future<String?> _showDeviceCodeDialog(GithubOAuthSession session) {
     return showDialog<String>(
       context: context,
       barrierDismissible: false,
-      builder: (ctx) {
-        final c = ItouColorsExt.of(ctx);
-        return AlertDialog(
-          backgroundColor: c.panel,
-          title: const Text('使用 GitHub 帳號登入'),
-          content: SizedBox(
-            width: 320,
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text(
-                  '在 GitHub 上輸入這個代碼完成授權：',
-                  style: TextStyle(color: c.dim, fontSize: 13),
-                ),
-                const SizedBox(height: 14),
-                SelectableText(
-                  session.userCode,
-                  style: TextStyle(
-                    fontFamily: 'monospace',
-                    fontSize: 34,
-                    letterSpacing: 6,
-                    fontWeight: FontWeight.w700,
-                    color: c.text,
-                  ),
-                ),
-                const SizedBox(height: 14),
-                SizedBox(
-                  width: double.infinity,
-                  child: ElevatedButton.icon(
-                    onPressed: () => launchUrl(
-                      Uri.parse(session.verificationUri),
-                      mode: LaunchMode.externalApplication,
-                    ),
-                    icon: const Icon(Icons.open_in_browser, size: 18),
-                    label: const Text('開啟 GitHub 授權頁面'),
-                  ),
-                ),
-                const SizedBox(height: 14),
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    SizedBox(
-                      width: 14,
-                      height: 14,
-                      child: CircularProgressIndicator(
-                        strokeWidth: 2,
-                        color: c.blue,
-                      ),
-                    ),
-                    const SizedBox(width: 10),
-                    Text(
-                      '等待授權…',
-                      style: TextStyle(color: c.mute, fontSize: 12),
-                    ),
-                  ],
-                ),
-              ],
-            ),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () {
-                cancelled = true;
-                Navigator.of(ctx).pop();
-              },
-              child: const Text('取消'),
-            ),
-          ],
-        );
-      },
-    ).then((_) async {
-      if (cancelled) return null;
-      return GithubOAuth.pollForToken(session, isCancelled: () => cancelled);
-    });
+      builder: (ctx) => _DeviceCodeDialog(session: session),
+    );
   }
 
   Future<void> _disconnect() async {
@@ -302,7 +229,7 @@ class _GithubAccountScreenState extends State<GithubAccountScreen> {
               const SizedBox(height: 12),
               Text(
                 _error!,
-                style: const TextStyle(color: Color(0xFFE0777A), fontSize: 13),
+                style: const TextStyle(color: ItouColors.danger, fontSize: 13),
               ),
             ],
             const SizedBox(height: 20),
@@ -332,6 +259,136 @@ class _GithubAccountScreenState extends State<GithubAccountScreen> {
           ],
         ),
       ),
+    );
+  }
+}
+
+/// The device-flow dialog: shows the user code (tap to copy) and a button
+/// to open GitHub's verification page, then polls for the token itself as
+/// soon as it's shown — not gated behind the dialog closing, since that
+/// would mean polling only starts *after* the user already cancelled.
+class _DeviceCodeDialog extends StatefulWidget {
+  final GithubOAuthSession session;
+
+  const _DeviceCodeDialog({required this.session});
+
+  @override
+  State<_DeviceCodeDialog> createState() => _DeviceCodeDialogState();
+}
+
+class _DeviceCodeDialogState extends State<_DeviceCodeDialog> {
+  bool _cancelled = false;
+  String? _error;
+
+  @override
+  void initState() {
+    super.initState();
+    _poll();
+  }
+
+  Future<void> _poll() async {
+    try {
+      final token = await GithubOAuth.pollForToken(
+        widget.session,
+        isCancelled: () => _cancelled,
+      );
+      if (mounted) Navigator.of(context).pop(token);
+    } on GithubOAuthException catch (e) {
+      if (mounted && !_cancelled) setState(() => _error = e.message);
+    }
+  }
+
+  void _cancel() {
+    _cancelled = true;
+    Navigator.of(context).pop();
+  }
+
+  void _copyUserCode() {
+    Clipboard.setData(ClipboardData(text: widget.session.userCode));
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(const SnackBar(content: Text('已複製代碼')));
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final c = ItouColorsExt.of(context);
+    return AlertDialog(
+      backgroundColor: c.panel,
+      title: const Text('使用 GitHub 帳號登入'),
+      content: SizedBox(
+        width: 320,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              '在 GitHub 上輸入這個代碼完成授權：',
+              style: TextStyle(color: c.dim, fontSize: 13),
+            ),
+            const SizedBox(height: 14),
+            InkWell(
+              onTap: _copyUserCode,
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Text(
+                    widget.session.userCode,
+                    style: TextStyle(
+                      fontFamily: 'monospace',
+                      fontSize: 34,
+                      letterSpacing: 6,
+                      fontWeight: FontWeight.w700,
+                      color: c.text,
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Icon(Icons.copy_outlined, size: 18, color: c.mute),
+                ],
+              ),
+            ),
+            const SizedBox(height: 14),
+            SizedBox(
+              width: double.infinity,
+              child: ElevatedButton.icon(
+                onPressed: () => launchUrl(
+                  Uri.parse(widget.session.verificationUri),
+                  mode: LaunchMode.externalApplication,
+                ),
+                icon: const Icon(Icons.open_in_browser, size: 18),
+                label: const Text('開啟 GitHub 授權頁面'),
+              ),
+            ),
+            const SizedBox(height: 14),
+            if (_error != null)
+              Text(
+                _error!,
+                style: const TextStyle(color: ItouColors.danger, fontSize: 12),
+              )
+            else
+              Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  SizedBox(
+                    width: 14,
+                    height: 14,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      color: c.blue,
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  Text(
+                    '等待授權…',
+                    style: TextStyle(color: c.mute, fontSize: 12),
+                  ),
+                ],
+              ),
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(onPressed: _cancel, child: const Text('取消')),
+      ],
     );
   }
 }

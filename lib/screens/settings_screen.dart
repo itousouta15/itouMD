@@ -16,14 +16,15 @@ import '../services/theme_prefs.dart';
 import '../services/ui_prefs.dart';
 import '../services/update_checker.dart';
 import '../theme.dart';
-import '../widgets/color_swatch_row.dart';
 import '../widgets/hsv_color_picker.dart';
 import '../widgets/loader_ring.dart';
-import '../widgets/reader_font_picker.dart';
 import '../widgets/update_dialog.dart';
 import 'hackmd_account_screen.dart';
 import 'github_account_screen.dart';
 import 'onboarding_screen.dart';
+import 'settings/reader_prefs_section.dart';
+import 'settings/settings_widgets.dart';
+import 'settings/theme_colors_section.dart';
 import 'sync_history_screen.dart';
 
 class SettingsScreen extends StatefulWidget {
@@ -364,7 +365,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
         children: [
           const SectionLabel('外觀'),
           const SizedBox(height: 8),
-          _Panel(
+          Panel(
             children: [
               Padding(
                 padding: const EdgeInsets.fromLTRB(14, 12, 14, 14),
@@ -392,7 +393,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       spacing: 8,
                       runSpacing: 8,
                       children: ThemeMode.values.map((mode) {
-                        return _ChoiceTile(
+                        return ChoiceTile(
                           label: _themeModeLabel(mode),
                           selected: _themeMode == mode,
                           onTap: () => _setThemeMode(mode),
@@ -408,7 +409,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 ),
               ),
               Divider(height: 1, thickness: 1, color: c.border),
-              _ThemeColorsSection(
+              ThemeColorsSection(
                 custom: _custom,
                 onSelectAccent: (brightness, accent) => _setCustom(
                   brightness == Brightness.dark
@@ -421,7 +422,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       : _custom.copyWith(lightBackground: background),
                 ),
                 onPickCustom: (brightness, role) =>
-                    role == _ThemeColorRole.accent
+                    role == ThemeColorRole.accent
                     ? _pickAccent(brightness)
                     : _pickBackground(brightness),
                 onReset: (brightness) => _setCustom(
@@ -450,7 +451,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       spacing: 8,
                       runSpacing: 8,
                       children: UiScale.values.map((s) {
-                        return _ChoiceTile(
+                        return ChoiceTile(
                           label: s.label,
                           selected: _uiScale == s,
                           onTap: () => _setUiScale(s),
@@ -465,9 +466,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
           const SizedBox(height: 24),
           const SectionLabel('閱讀偏好'),
           const SizedBox(height: 8),
-          _Panel(
+          Panel(
             children: [
-              _ReaderPrefsSection(
+              ReaderPrefsSection(
                 prefs: _readerPrefs,
                 onChanged: _updateReaderPrefs,
                 onCustomColorTap: _showColorPicker,
@@ -477,9 +478,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
           const SizedBox(height: 24),
           const SectionLabel('HackMD 同步'),
           const SizedBox(height: 8),
-          _Panel(
+          Panel(
             children: [
-              _SettingRow(
+              SettingRow(
                 icon: Icons.sync_outlined,
                 label: '開啟時自動更新',
                 trailing: Switch(
@@ -542,7 +543,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 ),
               ),
               Divider(height: 1, thickness: 1, color: c.border),
-              _SettingRow(
+              SettingRow(
                 icon: Icons.history,
                 label: '同步紀錄',
                 trailing: Icon(Icons.chevron_right, size: 18, color: c.mute),
@@ -555,9 +556,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
           const SizedBox(height: 24),
           const SectionLabel('HackMD 帳號'),
           const SizedBox(height: 8),
-          _Panel(
+          Panel(
             children: [
-              _SettingRow(
+              SettingRow(
                 icon: _user != null
                     ? Icons.cloud_done_outlined
                     : Icons.cloud_off_outlined,
@@ -573,9 +574,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
           const SizedBox(height: 24),
           const SectionLabel('GitHub 帳號'),
           const SizedBox(height: 8),
-          _Panel(
+          Panel(
             children: [
-              _SettingRow(
+              SettingRow(
                 icon: _githubUser != null
                     ? Icons.cloud_done_outlined
                     : Icons.cloud_off_outlined,
@@ -589,9 +590,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
           const SizedBox(height: 24),
           const SectionLabel('AI 助理'),
           const SizedBox(height: 8),
-          _Panel(
+          Panel(
             children: [
-              _SettingRow(
+              SettingRow(
                 icon: Icons.auto_awesome_outlined,
                 label: '使用內建免費額度',
                 trailing: Switch(
@@ -672,7 +673,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       Text(
                         _llmTestResult!,
                         style: TextStyle(
-                          color: _llmTestOk ? c.blue : const Color(0xFFE0777A),
+                          color: _llmTestOk ? c.blue : ItouColors.danger,
                           fontSize: 12,
                           height: 1.5,
                         ),
@@ -686,20 +687,20 @@ class _SettingsScreenState extends State<SettingsScreen> {
           const SizedBox(height: 24),
           const SectionLabel('資料管理'),
           const SizedBox(height: 8),
-          _Panel(
+          Panel(
             children: [
-              _SettingRow(
+              SettingRow(
                 icon: Icons.delete_outline,
                 label: '清除最近開啟紀錄',
-                labelColor: const Color(0xFFE0777A),
+                labelColor: ItouColors.danger,
                 trailing: const SizedBox.shrink(),
                 onTap: _clearRecents,
               ),
               Divider(height: 1, thickness: 1, color: c.border),
-              _SettingRow(
+              SettingRow(
                 icon: Icons.delete_sweep_outlined,
                 label: '清除離線快取',
-                labelColor: const Color(0xFFE0777A),
+                labelColor: ItouColors.danger,
                 trailing: const SizedBox.shrink(),
                 onTap: _clearNoteCache,
               ),
@@ -708,16 +709,16 @@ class _SettingsScreenState extends State<SettingsScreen> {
           const SizedBox(height: 24),
           const SectionLabel('更多'),
           const SizedBox(height: 8),
-          _Panel(
+          Panel(
             children: [
-              _SettingRow(
+              SettingRow(
                 icon: Icons.system_update_outlined,
                 label: '檢查更新',
                 trailing: Icon(Icons.chevron_right, size: 18, color: c.mute),
                 onTap: () => _checkForUpdate(context),
               ),
               Divider(height: 1, thickness: 1, color: c.border),
-              _SettingRow(
+              SettingRow(
                 icon: Icons.touch_app_outlined,
                 label: '重新查看介紹',
                 trailing: Icon(Icons.chevron_right, size: 18, color: c.mute),
@@ -734,7 +735,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
           const SizedBox(height: 24),
           const SectionLabel('關於'),
           const SizedBox(height: 8),
-          _Panel(
+          Panel(
             children: [
               Padding(
                 padding: const EdgeInsets.symmetric(
@@ -791,13 +792,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       ),
                     ),
                     const SizedBox(height: 10),
-                    _ThanksRow(
+                    ThanksRow(
                       logo: 'assets/logo/emfont_logo.jpg',
                       text: '感謝 emfont 提供開源字型資源',
                       c: c,
                     ),
                     const SizedBox(height: 10),
-                    _ThanksRow(
+                    ThanksRow(
                       logo: 'assets/logo/hackmd_logo.png',
                       text: '感謝 HackMD 的容器語法與協作設計',
                       c: c,
@@ -825,402 +826,3 @@ String _themeModeLabel(ThemeMode mode) => switch (mode) {
   ThemeMode.system => '跟隨系統',
 };
 
-/// Which colour a custom picker edits within a theme.
-enum _ThemeColorRole { accent, background }
-
-/// The theme colour section ("主題顏色"): one block per light/dark theme,
-/// each with an accent row (default + per-theme presets + custom) and an
-/// auto/custom background row, all using the shared big-circle swatch row.
-class _ThemeColorsSection extends StatelessWidget {
-  final ThemeCustomization custom;
-  final void Function(Brightness brightness, Color? accent) onSelectAccent;
-  final void Function(Brightness brightness, Color? background)
-  onSelectBackground;
-  final void Function(Brightness brightness, _ThemeColorRole role) onPickCustom;
-  final void Function(Brightness brightness) onReset;
-
-  const _ThemeColorsSection({
-    required this.custom,
-    required this.onSelectAccent,
-    required this.onSelectBackground,
-    required this.onPickCustom,
-    required this.onReset,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final c = ItouColorsExt.of(context);
-
-    Widget themeBlock({
-      required String label,
-      required Color? accent,
-      required Color? background,
-      required Brightness brightness,
-    }) {
-      final isDark = brightness == Brightness.dark;
-      final presets = isDark ? darkAccentPresets : lightAccentPresets;
-      final defaultAccent = isDark
-          ? ItouColors.dark.blue
-          : ItouColors.light.blue;
-      final defaultBg = isDark ? ItouColors.dark.bg : ItouColors.light.bg;
-      final presetIndex = accent == null ? -1 : presets.indexOf(accent);
-      // Index 0 = 預設 (theme's built-in colour); -1 = custom selected.
-      final accentIndex = accent == null
-          ? 0
-          : presetIndex >= 0
-          ? presetIndex + 1
-          : -1;
-      // The "自動" circle previews the background that will actually apply:
-      // an accent-derived tint once an accent is set, the theme default
-      // otherwise.
-      final autoBg = accent != null
-          ? ItouColors.autoBackground(accent, brightness)
-          : defaultBg;
-
-      return Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Row(
-            children: [
-              Text(
-                label,
-                style: TextStyle(
-                  color: c.text,
-                  fontSize: 13,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-              const Spacer(),
-              GestureDetector(
-                onTap: () => onReset(brightness),
-                child: Text(
-                  '重設',
-                  style: TextStyle(color: c.mute, fontSize: 11),
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 12),
-          Text('主色', style: TextStyle(color: c.dim, fontSize: 11)),
-          const SizedBox(height: 6),
-          ColorSwatchRow(
-            swatches: [defaultAccent, ...presets],
-            selectedIndex: accentIndex,
-            customColor: accent,
-            onSwatchTap: (i) =>
-                onSelectAccent(brightness, i == 0 ? null : presets[i - 1]),
-            onCustomTap: () => onPickCustom(brightness, _ThemeColorRole.accent),
-          ),
-          const SizedBox(height: 14),
-          Text('背景', style: TextStyle(color: c.dim, fontSize: 11)),
-          const SizedBox(height: 6),
-          ColorSwatchRow(
-            swatches: [autoBg],
-            selectedIndex: background == null ? 0 : -1,
-            customColor: background,
-            onSwatchTap: (_) => onSelectBackground(brightness, null),
-            onCustomTap: () =>
-                onPickCustom(brightness, _ThemeColorRole.background),
-          ),
-        ],
-      );
-    }
-
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(14, 12, 14, 14),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Text('主題顏色', style: TextStyle(color: c.text, fontSize: 14)),
-          const SizedBox(height: 4),
-          Text(
-            '主色用於按鈕與連結等強調色；背景「自動」會跟隨主色衍生，'
-            '淺色與深色主題可分別設定。',
-            style: TextStyle(color: c.dim, fontSize: 12),
-          ),
-          const SizedBox(height: 14),
-          themeBlock(
-            label: '淺色主題',
-            accent: custom.lightAccent,
-            background: custom.lightBackground,
-            brightness: Brightness.light,
-          ),
-          const SizedBox(height: 14),
-          themeBlock(
-            label: '深色主題',
-            accent: custom.darkAccent,
-            background: custom.darkBackground,
-            brightness: Brightness.dark,
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _Panel extends StatelessWidget {
-  final List<Widget> children;
-
-  const _Panel({required this.children});
-
-  @override
-  Widget build(BuildContext context) {
-    final c = ItouColorsExt.of(context);
-    return Container(
-      decoration: BoxDecoration(
-        color: c.panel,
-        border: Border.all(color: c.border),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: children,
-      ),
-    );
-  }
-}
-
-class _SettingRow extends StatelessWidget {
-  final IconData icon;
-  final String label;
-  final Color? labelColor;
-  final Widget trailing;
-  final VoidCallback onTap;
-
-  const _SettingRow({
-    required this.icon,
-    required this.label,
-    this.labelColor,
-    required this.trailing,
-    required this.onTap,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final c = ItouColorsExt.of(context);
-    return InkWell(
-      onTap: onTap,
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-        child: Row(
-          children: [
-            Icon(icon, size: 20, color: labelColor ?? c.dim),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Text(
-                label,
-                style: TextStyle(color: labelColor ?? c.text, fontSize: 14),
-              ),
-            ),
-            trailing,
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _ReaderPrefsSection extends StatelessWidget {
-  final ReaderPrefs prefs;
-  final ValueChanged<ReaderPrefs> onChanged;
-  final VoidCallback onCustomColorTap;
-
-  const _ReaderPrefsSection({
-    required this.prefs,
-    required this.onChanged,
-    required this.onCustomColorTap,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final c = ItouColorsExt.of(context);
-    final brightness = Theme.of(context).brightness;
-
-    return Padding(
-      padding: const EdgeInsets.all(14),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Text(
-            '字體',
-            style: TextStyle(
-              color: c.text,
-              fontSize: 13,
-              fontWeight: FontWeight.w600,
-            ),
-          ),
-          const SizedBox(height: 10),
-          ReaderFontPicker(
-            selected: prefs.fontFamily,
-            onChanged: (f) => onChanged(prefs.copyWith(fontFamily: f)),
-          ),
-          const SizedBox(height: 10),
-          Container(
-            width: double.infinity,
-            padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(
-              color: c.inset,
-              border: Border.all(color: c.border),
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text('預覽', style: TextStyle(color: c.mute, fontSize: 11)),
-                const SizedBox(height: 8),
-                Text(
-                  '中文閱讀體驗、The quick brown fox と日本語。',
-                  style: prefs.fontFamily.textStyle().copyWith(
-                    fontSize: prefs.fontSize,
-                    color: prefs.textColor.resolve(
-                      c,
-                      brightness,
-                      prefs.customColor,
-                    ),
-                    height: 1.6,
-                  ),
-                ),
-                const SizedBox(height: 6),
-                Text(
-                  '## Heading  *italic*  **bold**  `code`',
-                  style: prefs.fontFamily.textStyle().copyWith(
-                    fontSize: prefs.fontSize - 2,
-                    color: prefs.textColor
-                        .resolve(c, brightness, prefs.customColor)
-                        .withValues(alpha: 0.7),
-                    height: 1.6,
-                  ),
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(height: 16),
-          Row(
-            children: [
-              Text(
-                '字級',
-                style: TextStyle(
-                  color: c.text,
-                  fontSize: 13,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-              const Spacer(),
-              Text(
-                prefs.fontSize.toStringAsFixed(0),
-                style: TextStyle(color: c.dim, fontSize: 12),
-              ),
-            ],
-          ),
-          SliderTheme(
-            data: SliderThemeData(
-              activeTrackColor: c.blue,
-              inactiveTrackColor: c.border2,
-              thumbColor: c.blue,
-              overlayColor: c.blue.withValues(alpha: 0.15),
-              trackHeight: 2,
-            ),
-            child: Slider(
-              value: prefs.fontSize,
-              min: ReaderPrefs.minFontSize,
-              max: ReaderPrefs.maxFontSize,
-              divisions:
-                  ((ReaderPrefs.maxFontSize - ReaderPrefs.minFontSize) / 0.5)
-                      .round(),
-              onChanged: (v) => onChanged(prefs.copyWith(fontSize: v)),
-            ),
-          ),
-          const SizedBox(height: 10),
-          Text(
-            '文字顏色',
-            style: TextStyle(
-              color: c.text,
-              fontSize: 13,
-              fontWeight: FontWeight.w600,
-            ),
-          ),
-          const SizedBox(height: 12),
-          ReaderColorRow(
-            selected: prefs.textColor,
-            customColor: prefs.customColor,
-            brightness: brightness,
-            onSwatch: (tc) => onChanged(prefs.copyWith(textColor: tc)),
-            onCustom: onCustomColorTap,
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _ChoiceTile extends StatelessWidget {
-  final String label;
-  final bool selected;
-  final VoidCallback onTap;
-
-  const _ChoiceTile({
-    required this.label,
-    required this.selected,
-    required this.onTap,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final c = ItouColorsExt.of(context);
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 12),
-        alignment: Alignment.center,
-        decoration: BoxDecoration(
-          color: selected ? c.panelHover : c.inset,
-          border: Border.all(color: selected ? c.blue : c.border),
-        ),
-        child: Text(
-          label,
-          style: TextStyle(
-            color: selected ? c.text : c.dim,
-            fontSize: 13,
-            fontWeight: selected ? FontWeight.w600 : FontWeight.w400,
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _ThanksRow extends StatelessWidget {
-  final String logo;
-  final String text;
-  final ItouColors c;
-
-  const _ThanksRow({required this.logo, required this.text, required this.c});
-
-  @override
-  Widget build(BuildContext context) {
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.center,
-      children: [
-        Container(
-          width: 32,
-          height: 32,
-          padding: const EdgeInsets.all(3),
-          decoration: BoxDecoration(
-            color: c.inset,
-            border: Border.all(color: c.border),
-            borderRadius: BorderRadius.circular(8),
-          ),
-          child: ClipRRect(
-            borderRadius: BorderRadius.circular(5),
-            child: Image.asset(logo, fit: BoxFit.contain),
-          ),
-        ),
-        const SizedBox(width: 10),
-        Expanded(
-          child: Text(
-            text,
-            style: TextStyle(color: c.dim, fontSize: 12.5, height: 1.4),
-          ),
-        ),
-      ],
-    );
-  }
-}

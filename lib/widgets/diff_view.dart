@@ -3,8 +3,8 @@ import 'package:flutter/material.dart';
 import '../services/markdown_diff.dart';
 import '../theme.dart';
 
-const kAddColor = Color(0xFF7FAE83);
-const kDelColor = Color(0xFFE0777A);
+const kAddColor = ItouColors.success;
+const kDelColor = ItouColors.danger;
 
 /// Renders line-level [DiffHunk]s the way the sync conflict screen does:
 /// removed lines in red with a `−` marker, added lines in green with a `+`

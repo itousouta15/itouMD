@@ -8,22 +8,16 @@ import 'package:flutter_highlight/flutter_highlight.dart';
 import 'package:flutter_highlight/themes/atom-one-dark.dart';
 import 'package:flutter_highlight/themes/atom-one-light.dart';
 import 'package:flutter_math_fork/flutter_math.dart';
-import 'package:flutter_svg/flutter_svg.dart';
 import 'package:flutter_widget_from_html_core/flutter_widget_from_html_core.dart';
-import 'package:fwfh_svg/fwfh_svg.dart';
 import 'package:highlight/highlight.dart' show highlight;
 import 'package:highlight/languages/all.dart' show allLanguages;
 import 'package:html/dom.dart' as dom;
-import 'package:http/http.dart' as http;
 import 'package:url_launcher/url_launcher.dart';
 
 import '../services/github_account.dart';
 import '../services/github_api.dart';
 import '../services/hackmd_account.dart';
 import '../services/hackmd_api.dart';
-import '../services/llm_client.dart';
-import '../services/llm_prefs.dart';
-import '../services/markdown_diff.dart';
 import '../services/markdown_editor_actions.dart';
 import '../services/markdown_renderer.dart';
 import '../services/note_cache.dart';
@@ -32,44 +26,15 @@ import '../services/recent_docs.dart';
 import '../services/sync_history.dart';
 import '../services/sync_prefs.dart';
 import '../theme.dart';
-import '../widgets/color_swatch_row.dart';
-import '../widgets/diff_view.dart';
-import '../widgets/hsv_color_picker.dart';
 import '../widgets/loader_ring.dart';
-import '../widgets/reader_font_picker.dart';
 import 'conflict_screen.dart';
 import 'github_account_screen.dart';
 import 'hackmd_account_screen.dart';
-
-/// Turns "press Enter on a list item" into "continue the list" instead of a
-/// bare newline — the single biggest bit of editor friction on mobile,
-/// where retyping `- ` for every line is tedious with no physical keyboard.
-class _MarkdownListContinuationFormatter extends TextInputFormatter {
-  @override
-  TextEditingValue formatEditUpdate(
-    TextEditingValue oldValue,
-    TextEditingValue newValue,
-  ) {
-    // Don't interfere mid-IME-composition (CJK input etc.).
-    if (newValue.composing != TextRange.empty) return newValue;
-    if (newValue.text.length != oldValue.text.length + 1) return newValue;
-    if (!newValue.selection.isCollapsed) return newValue;
-
-    final insertionIndex = newValue.selection.baseOffset - 1;
-    if (insertionIndex < 0 || insertionIndex >= newValue.text.length) {
-      return newValue;
-    }
-    if (newValue.text[insertionIndex] != '\n') return newValue;
-
-    final result = computeEnterListContinuation(newValue.text, insertionIndex);
-    if (result == null) return newValue;
-
-    return TextEditingValue(
-      text: result.text,
-      selection: TextSelection.collapsed(offset: result.cursor),
-    );
-  }
-}
+import 'viewer/ai_assistant_sheet.dart';
+import 'viewer/editor_toolbar.dart';
+import 'viewer/markdown_list_formatter.dart';
+import 'viewer/network_image_sniffer.dart';
+import 'viewer/reader_settings_sheet.dart';
 
 var _highlightLanguagesRegistered = false;
 
@@ -80,208 +45,6 @@ void _ensureHighlightLanguagesRegistered() {
   if (_highlightLanguagesRegistered) return;
   highlight.registerLanguages(allLanguages);
   _highlightLanguagesRegistered = true;
-}
-
-/// Many badge/status-image services (shields.io and friends) serve SVG
-/// without a `.svg` extension in the URL, so [SvgFactory]'s suffix check
-/// misses them. This sniffs the actual response bytes for network images
-/// and routes to [SvgPicture] or a raster [Image] accordingly.
-class _SvgAwareWidgetFactory extends WidgetFactory with SvgFactory {
-  final ValueChanged<String>? onImageTap;
-
-  _SvgAwareWidgetFactory({this.onImageTap});
-
-  @override
-  Widget? buildImageWidget(BuildTree tree, ImageSource src) {
-    final url = src.url;
-    Widget? base;
-    if (url.startsWith('http://') || url.startsWith('https://')) {
-      base = _SniffedNetworkImage(
-        url: url,
-        width: src.width,
-        height: src.height,
-      );
-    } else {
-      base = super.buildImageWidget(tree, src);
-    }
-    if (base == null || onImageTap == null) return base;
-    return GestureDetector(onTap: () => onImageTap!(url), child: base);
-  }
-
-  /// `[TOC]`-generated links point at `#slug` anchors; the `markdown`
-  /// package percent-encodes non-ASCII link destinations (so CJK slugs come
-  /// through as `#%E7%AC%AC...`), but the `<a id>` anchors injected by
-  /// [injectHackmdToc] keep the raw text. Decode before handing off to the
-  /// anchor registry so the two actually match up.
-  @override
-  Future<bool> onTapUrl(String url) async {
-    if (url.startsWith('#')) {
-      final id = Uri.decodeComponent(url.substring(1));
-      return onTapAnchorWrapper(id);
-    }
-    return super.onTapUrl(url);
-  }
-}
-
-class _SniffedNetworkImage extends StatefulWidget {
-  final String url;
-  final double? width;
-  final double? height;
-
-  const _SniffedNetworkImage({required this.url, this.width, this.height});
-
-  @override
-  State<_SniffedNetworkImage> createState() => _SniffedNetworkImageState();
-}
-
-class _SniffedNetworkImageState extends State<_SniffedNetworkImage> {
-  static final _cache = <String, Uint8List>{};
-
-  late final Future<Uint8List> _future = _load();
-
-  Future<Uint8List> _load() async {
-    final cached = _cache[widget.url];
-    if (cached != null) return cached;
-    final res = await http.get(Uri.parse(widget.url));
-    if (res.statusCode != 200) {
-      throw Exception('HTTP ${res.statusCode}');
-    }
-    _cache[widget.url] = res.bodyBytes;
-    return res.bodyBytes;
-  }
-
-  bool _looksLikeSvg(Uint8List bytes) {
-    final sample = bytes.length > 300 ? bytes.sublist(0, 300) : bytes;
-    final head = utf8
-        .decode(sample, allowMalformed: true)
-        .trimLeft()
-        .toLowerCase();
-    return head.startsWith('<svg') || head.startsWith('<?xml');
-  }
-
-  /// flutter_svg cannot reliably render `<text>` elements combined with
-  /// nested `transform="scale()"` + `textLength` — the exact technique
-  /// shields.io-style badges use — and produces garbled glyphs. Plain
-  /// vector icons/logos/shapes have no `<text>` and are unaffected, so
-  /// skip only the SVGs that would come out looking broken.
-  bool _containsSvgText(Uint8List bytes) {
-    final text = utf8.decode(bytes, allowMalformed: true);
-    return RegExp(r'<text\b', caseSensitive: false).hasMatch(text);
-  }
-
-  /// Reads the width/height (or viewBox) declared on the root `<svg>` tag,
-  /// since badge services rarely set `width`/`height` on the `<img>` itself
-  /// and SvgPicture needs an aspect ratio to avoid being squashed/cropped
-  /// inside the surrounding text flow.
-  Size? _svgIntrinsicSize(Uint8List bytes) {
-    final text = utf8.decode(bytes, allowMalformed: true);
-    final tagMatch = RegExp(r'<svg\b[^>]*>').firstMatch(text);
-    if (tagMatch == null) return null;
-    final tag = tagMatch.group(0)!;
-
-    final w = RegExp(r'''width\s*=\s*["']([\d.]+)''').firstMatch(tag);
-    final h = RegExp(r'''height\s*=\s*["']([\d.]+)''').firstMatch(tag);
-    final width = w != null ? double.tryParse(w.group(1)!) : null;
-    final height = h != null ? double.tryParse(h.group(1)!) : null;
-    if (width != null && height != null && width > 0 && height > 0) {
-      return Size(width, height);
-    }
-
-    final vb = RegExp(
-      r'''viewBox\s*=\s*["']\s*[\-\d.]+\s+[\-\d.]+\s+([\d.]+)\s+([\d.]+)''',
-    ).firstMatch(tag);
-    if (vb != null) {
-      final vbWidth = double.tryParse(vb.group(1)!);
-      final vbHeight = double.tryParse(vb.group(2)!);
-      if (vbWidth != null && vbHeight != null && vbWidth > 0 && vbHeight > 0) {
-        return Size(vbWidth, vbHeight);
-      }
-    }
-    return null;
-  }
-
-  /// flutter_svg mis-renders (crops/misscales) SVGs that omit `viewBox` and
-  /// only declare `width`/`height` — a pattern shields.io and friends use
-  /// constantly. Per spec a missing viewBox should default to
-  /// `0 0 width height`, so patch that in explicitly before handing the
-  /// bytes to the renderer.
-  Uint8List _ensureViewBox(Uint8List bytes) {
-    final text = utf8.decode(bytes, allowMalformed: true);
-    final tagMatch = RegExp(r'<svg\b[^>]*>').firstMatch(text);
-    if (tagMatch == null) return bytes;
-    final tag = tagMatch.group(0)!;
-    if (tag.contains('viewBox')) return bytes;
-
-    final w = RegExp(r'''width\s*=\s*["']([\d.]+)''').firstMatch(tag);
-    final h = RegExp(r'''height\s*=\s*["']([\d.]+)''').firstMatch(tag);
-    if (w == null || h == null) return bytes;
-
-    final patchedTag = tag.replaceFirst(
-      '<svg',
-      '<svg viewBox="0 0 ${w.group(1)} ${h.group(1)}"',
-    );
-    final patchedText = text.replaceRange(
-      tagMatch.start,
-      tagMatch.end,
-      patchedTag,
-    );
-    return Uint8List.fromList(utf8.encode(patchedText));
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return FutureBuilder<Uint8List>(
-      future: _future,
-      builder: (context, snapshot) {
-        if (snapshot.connectionState != ConnectionState.done) {
-          return SizedBox(width: widget.width, height: widget.height ?? 20);
-        }
-        final bytes = snapshot.data;
-        if (bytes == null) {
-          return Icon(
-            Icons.broken_image_outlined,
-            size: widget.height ?? 24,
-            color: Colors.grey,
-          );
-        }
-        if (_looksLikeSvg(bytes)) {
-          if (_containsSvgText(bytes)) {
-            return const SizedBox.shrink();
-          }
-          var w = widget.width;
-          var h = widget.height;
-          final intrinsic = _svgIntrinsicSize(bytes);
-          if (intrinsic != null) {
-            final ratio = intrinsic.width / intrinsic.height;
-            if (w == null && h == null) {
-              h = 20;
-              w = h * ratio;
-            } else if (w == null) {
-              w = h! * ratio;
-            } else {
-              h ??= w / ratio;
-            }
-          }
-          return SvgPicture(
-            SvgBytesLoader(_ensureViewBox(bytes)),
-            width: w,
-            height: h,
-            fit: BoxFit.contain,
-          );
-        }
-        return Image.memory(
-          bytes,
-          width: widget.width,
-          height: widget.height,
-          errorBuilder: (context, error, stack) => Icon(
-            Icons.broken_image_outlined,
-            size: widget.height ?? 24,
-            color: Colors.grey,
-          ),
-        );
-      },
-    );
-  }
 }
 
 class ViewerScreen extends StatefulWidget {
@@ -373,6 +136,20 @@ class _ViewerScreenState extends State<ViewerScreen> {
     if (offset < 0) return 1;
     final clamped = offset > text.length ? text.length : offset;
     return '\n'.allMatches(text.substring(0, clamped)).length + 1;
+  }
+
+  /// Character offset of the start of 1-based [line] within [text] — the
+  /// inverse of [_lineOfOffset].
+  static int _offsetOfLine(String text, int line) {
+    if (line <= 1) return 0;
+    var seen = 1;
+    for (var i = 0; i < text.length; i++) {
+      if (text[i] == '\n') {
+        seen++;
+        if (seen == line) return i + 1;
+      }
+    }
+    return text.length;
   }
 
   @override
@@ -553,8 +330,23 @@ class _ViewerScreenState extends State<ViewerScreen> {
     );
   }
 
+  /// Enters edit mode with the cursor placed at roughly the line the
+  /// reader was scrolled to. Without this, autofocusing a fresh [TextField]
+  /// with no explicit selection parks the cursor — and the initial scroll
+  /// position — at the very end of the document.
   void _enterEdit() {
     _editController.text = _content;
+    final controller = _readerScrollController;
+    if (controller.hasClients && controller.position.maxScrollExtent > 0) {
+      final fraction = (controller.offset / controller.position.maxScrollExtent)
+          .clamp(0.0, 1.0);
+      final total = '\n'.allMatches(_content).length + 1;
+      final line = (fraction * total).round() + 1;
+      final offset = _offsetOfLine(_content, line.clamp(1, total));
+      _editController.selection = TextSelection.collapsed(
+        offset: offset.clamp(0, _content.length),
+      );
+    }
     setState(() => _editing = true);
   }
 
@@ -1113,9 +905,9 @@ class _ViewerScreenState extends State<ViewerScreen> {
     final insetHex = _hex(c.inset);
     final borderHex = _hex(c.border);
     final border2Hex = _hex(c.border2);
-    const successHex = '#7fae83';
-    const warningHex = '#ad8b5c';
-    const dangerHex = '#e0777a';
+    final successHex = ItouColors.hex6(ItouColors.success);
+    final warningHex = ItouColors.hex6(ItouColors.warning);
+    final dangerHex = ItouColors.hex6(ItouColors.danger);
 
     return Scaffold(
       appBar: AppBar(
@@ -1258,7 +1050,7 @@ class _ViewerScreenState extends State<ViewerScreen> {
                                 textAlignVertical: TextAlignVertical.top,
                                 keyboardType: TextInputType.multiline,
                                 inputFormatters: [
-                                  _MarkdownListContinuationFormatter(),
+                                  MarkdownListContinuationFormatter(),
                                 ],
                                 // A fixed line box lets the gutter numbers
                                 // stay pixel-aligned with the text lines.
@@ -1301,7 +1093,7 @@ class _ViewerScreenState extends State<ViewerScreen> {
                       ],
                     ),
                   ),
-                  _EditorToolbar(
+                  EditorToolbar(
                     c: c,
                     onHeading: _toolbarHeading,
                     onBold: () => _toolbarWrap('**'),
@@ -1327,7 +1119,7 @@ class _ViewerScreenState extends State<ViewerScreen> {
                     child: HtmlWidget(
                       html,
                       factoryBuilder: () =>
-                          _SvgAwareWidgetFactory(onImageTap: _showImagePreview),
+                          SvgAwareWidgetFactory(onImageTap: _showImagePreview),
                       textStyle: family.copyWith(
                         color: textColor,
                         fontSize: base,
@@ -1563,7 +1355,7 @@ class _ViewerScreenState extends State<ViewerScreen> {
           onTap: () => Navigator.of(ctx).pop(),
           child: InteractiveViewer(
             maxScale: 5,
-            child: Center(child: _SniffedNetworkImage(url: url)),
+            child: Center(child: SniffedNetworkImage(url: url)),
           ),
         ),
       ),
@@ -1585,7 +1377,7 @@ class _ViewerScreenState extends State<ViewerScreen> {
       backgroundColor: Colors.transparent,
       isScrollControlled: true,
       builder: (sheetContext) {
-        return _ReaderSettingsSheet(prefs: _prefs, onChanged: _updatePrefs);
+        return ReaderSettingsSheet(prefs: _prefs, onChanged: _updatePrefs);
       },
     );
   }
@@ -1601,7 +1393,7 @@ class _ViewerScreenState extends State<ViewerScreen> {
       context: context,
       backgroundColor: Colors.transparent,
       isScrollControlled: true,
-      builder: (sheetContext) => _AiAssistantSheet(
+      builder: (sheetContext) => AiAssistantSheet(
         docText: _editController.text,
         selection: sel,
         hasSelection: hasSelection,
@@ -1616,832 +1408,5 @@ class _ViewerScreenState extends State<ViewerScreen> {
       selection: TextSelection.collapsed(offset: range.start + newText.length),
     );
     _editFocusNode.requestFocus();
-  }
-}
-
-/// Instruction presets for the AI assistant: label + prompt template where
-/// `{text}` is replaced by the selected text (or the whole document).
-const _aiInstructions = <(String, String)>[
-  ('潤飾', '請潤飾以下內容，讓它更通順自然，保留 Markdown 格式：\n\n{text}'),
-  ('翻譯成繁體中文', '請將以下內容翻譯成繁體中文，保留 Markdown 格式：\n\n{text}'),
-  ('翻譯成英文', '請將以下內容翻譯成英文，保留 Markdown 格式：\n\n{text}'),
-  ('縮寫', '請將以下內容縮短並保留重點，保留 Markdown 格式：\n\n{text}'),
-  ('改寫', '請以不同寫法改寫以下內容、保留原意，保留 Markdown 格式：\n\n{text}'),
-  ('生成摘要', '請為以下內容生成簡短摘要，保留 Markdown 格式：\n\n{text}'),
-  ('擴寫內容', '請將以下內容擴寫得更詳細完整，補足說明與例子，保留 Markdown 格式：\n\n{text}'),
-  ('整理成表格', '請將以下內容整理成 Markdown 表格，設計清楚的欄位與表頭：\n\n{text}'),
-  ('整理成清單', '請將以下內容整理成條列式清單（項目符號或編號），保留重點：\n\n{text}'),
-  ('建議標題', '請為以下內容建議 3 個標題，直接列出，不要其他說明：\n\n{text}'),
-  ('改得更正式', '請將以下內容改寫成正式、書面的語氣，保留 Markdown 格式：\n\n{text}'),
-  ('改得更口語', '請將以下內容改寫成輕鬆口語的語氣，保留 Markdown 格式：\n\n{text}'),
-  ('修正錯別字與格式', '請修正以下內容的錯別字、標點與 Markdown 格式問題，只輸出修正後的內容：\n\n{text}'),
-];
-
-/// The editor's AI assistant sheet: two tabs — 快捷指令 (presets with an
-/// add/remove diff preview) and 自由交流 (multi-turn streaming chat). Both
-/// pop `(result, targetRange)` on 套用 so the caller can splice the AI
-/// output into the controller.
-class _AiAssistantSheet extends StatefulWidget {
-  final String docText;
-  final TextSelection selection;
-  final bool hasSelection;
-
-  const _AiAssistantSheet({
-    required this.docText,
-    required this.selection,
-    required this.hasSelection,
-  });
-
-  @override
-  State<_AiAssistantSheet> createState() => _AiAssistantSheetState();
-}
-
-class _AiAssistantSheetState extends State<_AiAssistantSheet> {
-  /// The text the LLM will process: the selection when there is one,
-  /// otherwise the whole document.
-  String get _targetText => widget.hasSelection
-      ? widget.docText.substring(widget.selection.start, widget.selection.end)
-      : widget.docText;
-
-  TextRange get _targetRange => widget.hasSelection
-      ? TextRange(start: widget.selection.start, end: widget.selection.end)
-      : TextRange(start: 0, end: widget.docText.length);
-
-  void _applyResult(String result) {
-    Navigator.of(context).pop((result, _targetRange));
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final c = ItouColorsExt.of(context);
-    return SafeArea(
-      child: Container(
-        margin: const EdgeInsets.all(12),
-        padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
-        decoration: BoxDecoration(
-          color: c.panel,
-          border: Border.all(color: c.border2),
-        ),
-        child: SizedBox(
-          height: MediaQuery.of(context).size.height * 0.72,
-          child: DefaultTabController(
-            length: 2,
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                Row(
-                  children: [
-                    Icon(Icons.auto_awesome, size: 18, color: c.blue),
-                    const SizedBox(width: 8),
-                    Text(
-                      'AI 助理',
-                      style: TextStyle(
-                        color: c.text,
-                        fontSize: 14,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                    const Spacer(),
-                    Text(
-                      widget.hasSelection
-                          ? '已選取 ${_targetText.length} 字'
-                          : '整篇文件',
-                      style: TextStyle(color: c.mute, fontSize: 11),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 10),
-                TabBar(
-                  tabs: const [
-                    Tab(text: '快捷指令'),
-                    Tab(text: '自由交流'),
-                  ],
-                  labelColor: c.text,
-                  unselectedLabelColor: c.dim,
-                  indicatorColor: c.blue,
-                  dividerColor: c.border,
-                ),
-                const SizedBox(height: 4),
-                Expanded(
-                  child: TabBarView(
-                    children: [
-                      _AiPresetTab(
-                        targetText: _targetText,
-                        onApply: _applyResult,
-                      ),
-                      _AiChatTab(
-                        docText: widget.docText,
-                        selection: widget.selection,
-                        hasSelection: widget.hasSelection,
-                        onApply: _applyResult,
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-/// 快捷指令 tab: pick an instruction, wait for the LLM, review the
-/// add/remove diff, then 套用.
-class _AiPresetTab extends StatefulWidget {
-  final String targetText;
-  final ValueChanged<String> onApply;
-
-  const _AiPresetTab({required this.targetText, required this.onApply});
-
-  @override
-  State<_AiPresetTab> createState() => _AiPresetTabState();
-}
-
-class _AiPresetTabState extends State<_AiPresetTab> {
-  bool _busy = false;
-  bool _showDiff = true;
-  String? _error;
-  String? _result;
-
-  /// Line-level changes the AI made to [widget.targetText].
-  List<DiffHunk> get _diffHunks {
-    final result = _result;
-    if (result == null) return const [];
-    return diffTexts(widget.targetText, result);
-  }
-
-  int get _addedCount => diffStats(_diffHunks).$1;
-  int get _removedCount => diffStats(_diffHunks).$2;
-
-  Future<void> _run(String instruction) async {
-    setState(() {
-      _busy = true;
-      _error = null;
-      _result = null;
-    });
-    try {
-      final useBuiltin = await LlmPrefs.useBuiltin;
-      final baseUrl = (await LlmPrefs.baseUrl)!;
-      final model = (await LlmPrefs.model)!;
-      final apiKey = useBuiltin ? null : await LlmPrefs.apiKey;
-      final reply = await LlmClient.complete(
-        baseUrl: baseUrl,
-        model: model,
-        apiKey: apiKey,
-        userPrompt: instruction.replaceFirst('{text}', widget.targetText),
-      );
-      if (mounted) setState(() => _result = reply);
-    } on LlmException catch (e) {
-      if (mounted) setState(() => _error = e.message);
-    } catch (_) {
-      if (mounted) setState(() => _error = 'AI 處理失敗，再試一次看看 (´;ω;`)');
-    } finally {
-      if (mounted) setState(() => _busy = false);
-    }
-  }
-
-  void _apply() {
-    final result = _result;
-    if (result == null) return;
-    widget.onApply(result);
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final c = ItouColorsExt.of(context);
-    return SingleChildScrollView(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          const SizedBox(height: 8),
-          Wrap(
-            spacing: 8,
-            runSpacing: 8,
-            children: [
-              for (final (label, prompt) in _aiInstructions)
-                GestureDetector(
-                  onTap: _busy ? null : () => _run(prompt),
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(
-                      vertical: 8,
-                      horizontal: 12,
-                    ),
-                    decoration: BoxDecoration(
-                      color: c.inset,
-                      border: Border.all(color: c.border),
-                    ),
-                    child: Text(
-                      label,
-                      style: TextStyle(color: c.text, fontSize: 12),
-                    ),
-                  ),
-                ),
-            ],
-          ),
-          if (_busy) ...[
-            const SizedBox(height: 14),
-            LinearProgressIndicator(
-              minHeight: 3,
-              backgroundColor: c.border2,
-              color: c.blue,
-            ),
-            const SizedBox(height: 6),
-            Text('AI 處理中…', style: TextStyle(color: c.mute, fontSize: 11)),
-          ],
-          if (_error != null) ...[
-            const SizedBox(height: 12),
-            Text(
-              _error!,
-              style: const TextStyle(color: Color(0xFFE0777A), fontSize: 12),
-            ),
-          ],
-          if (_result != null) ...[
-            const SizedBox(height: 12),
-            Row(
-              children: [
-                Text(
-                  '新增 $_addedCount 行・刪除 $_removedCount 行',
-                  style: TextStyle(color: c.dim, fontSize: 11.5),
-                ),
-                const Spacer(),
-                GestureDetector(
-                  onTap: () => setState(() => _showDiff = !_showDiff),
-                  child: Text(
-                    _showDiff ? '顯示原始文字' : '顯示差異',
-                    style: TextStyle(color: c.blue, fontSize: 12),
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 6),
-            Container(
-              constraints: const BoxConstraints(maxHeight: 220),
-              padding: const EdgeInsets.all(10),
-              decoration: BoxDecoration(
-                color: c.inset,
-                border: Border.all(color: c.border),
-              ),
-              child: SingleChildScrollView(
-                child: _showDiff
-                    ? (_diffHunks.isEmpty
-                          ? Text(
-                              '沒有變更',
-                              style: TextStyle(color: c.mute, fontSize: 12),
-                            )
-                          : DiffView(hunks: _diffHunks, c: c))
-                    : Text(
-                        _result!,
-                        style: TextStyle(
-                          color: c.text,
-                          fontSize: 12.5,
-                          height: 1.5,
-                        ),
-                      ),
-              ),
-            ),
-            const SizedBox(height: 12),
-            Row(
-              children: [
-                Expanded(
-                  child: ElevatedButton(
-                    onPressed: () => Navigator.of(context).pop(),
-                    child: const Text('取消'),
-                  ),
-                ),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: ElevatedButton(
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: c.blue,
-                      foregroundColor: Colors.white,
-                    ),
-                    onPressed: _apply,
-                    child: const Text('套用'),
-                  ),
-                ),
-              ],
-            ),
-          ],
-        ],
-      ),
-    );
-  }
-}
-
-/// 自由交流 tab: multi-turn chat with streaming replies. The document
-/// (and current selection, when there is one) is injected into the system
-/// prompt on every turn so the model knows what the user is talking about.
-/// History lives only for the lifetime of this sheet — reopening starts a
-/// fresh conversation.
-class _AiChatTab extends StatefulWidget {
-  final String docText;
-  final TextSelection selection;
-  final bool hasSelection;
-  final ValueChanged<String> onApply;
-
-  const _AiChatTab({
-    required this.docText,
-    required this.selection,
-    required this.hasSelection,
-    required this.onApply,
-  });
-
-  @override
-  State<_AiChatTab> createState() => _AiChatTabState();
-}
-
-class _AiChatTabState extends State<_AiChatTab> {
-  final _messages = <({String role, String content})>[];
-  final _inputController = TextEditingController();
-  final _scrollController = ScrollController();
-  bool _busy = false;
-  String? _error;
-
-  @override
-  void dispose() {
-    _inputController.dispose();
-    _scrollController.dispose();
-    super.dispose();
-  }
-
-  void _scrollToBottom() {
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!_scrollController.hasClients) return;
-      _scrollController.animateTo(
-        _scrollController.position.maxScrollExtent,
-        duration: const Duration(milliseconds: 200),
-        curve: Curves.easeOut,
-      );
-    });
-  }
-
-  /// The document context injected into the system prompt on every turn:
-  /// the full document (truncated) plus the current selection, so the model
-  /// can answer questions like "把選取的這段改成口語".
-  String _contextBlock() {
-    const maxDocChars = 6000;
-    final doc = widget.docText;
-    final truncated = doc.length > maxDocChars
-        ? '${doc.substring(0, maxDocChars)}\n…（內容已截斷）'
-        : doc;
-    final buffer = StringBuffer('以下是使用者正在編輯的文件內容：\n```\n$truncated\n```');
-    if (widget.hasSelection) {
-      final sel = widget.selection;
-      buffer.write(
-        '\n目前選取的文字：\n```\n'
-        '${widget.docText.substring(sel.start, sel.end)}\n```',
-      );
-    }
-    return buffer.toString();
-  }
-
-  Future<void> _send() async {
-    final text = _inputController.text.trim();
-    if (text.isEmpty || _busy) return;
-    _inputController.clear();
-    setState(() {
-      _messages.add((role: 'user', content: text));
-      _busy = true;
-      _error = null;
-    });
-    _scrollToBottom();
-
-    try {
-      final useBuiltin = await LlmPrefs.useBuiltin;
-      final baseUrl = (await LlmPrefs.baseUrl)!;
-      final model = (await LlmPrefs.model)!;
-      final apiKey = useBuiltin ? null : await LlmPrefs.apiKey;
-      var reply = '';
-      final full = await LlmClient.completeStream(
-        baseUrl: baseUrl,
-        model: model,
-        apiKey: apiKey,
-        messages: List.of(_messages),
-        extraSystem: _contextBlock(),
-        onDelta: (delta) {
-          reply += delta;
-          if (!mounted) return;
-          setState(() {
-            if (_messages.isNotEmpty && _messages.last.role == 'assistant') {
-              _messages[_messages.length - 1] = (
-                role: 'assistant',
-                content: reply,
-              );
-            } else {
-              _messages.add((role: 'assistant', content: reply));
-            }
-          });
-          _scrollToBottom();
-        },
-      );
-      if (!mounted) return;
-      setState(() {
-        if (_messages.isEmpty || _messages.last.role != 'assistant') {
-          _messages.add((role: 'assistant', content: full));
-        }
-      });
-    } on LlmException catch (e) {
-      if (mounted) setState(() => _error = e.message);
-    } catch (_) {
-      if (mounted) setState(() => _error = 'AI 處理失敗，再試一次看看 (´;ω;`)');
-    } finally {
-      if (mounted) setState(() => _busy = false);
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final c = ItouColorsExt.of(context);
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        Expanded(
-          child: _messages.isEmpty && !_busy
-              ? Center(
-                  child: Padding(
-                    padding: const EdgeInsets.all(24),
-                    child: Text(
-                      '跟 AI 自由對話，例如：\n「幫我把這篇改成更口語的語氣」',
-                      textAlign: TextAlign.center,
-                      style: TextStyle(
-                        color: c.mute,
-                        fontSize: 12.5,
-                        height: 1.6,
-                      ),
-                    ),
-                  ),
-                )
-              : ListView.builder(
-                  controller: _scrollController,
-                  padding: const EdgeInsets.symmetric(vertical: 8),
-                  itemCount: _messages.length + (_error != null ? 1 : 0),
-                  itemBuilder: (context, index) {
-                    if (index >= _messages.length) {
-                      return Padding(
-                        padding: const EdgeInsets.only(top: 8),
-                        child: Text(
-                          _error!,
-                          style: const TextStyle(
-                            color: Color(0xFFE0777A),
-                            fontSize: 12,
-                          ),
-                        ),
-                      );
-                    }
-                    final message = _messages[index];
-                    return _ChatBubble(
-                      role: message.role,
-                      content: message.content,
-                      busy:
-                          _busy &&
-                          index == _messages.length - 1 &&
-                          message.role == 'assistant' &&
-                          message.content.isEmpty,
-                      onApply: message.role == 'assistant'
-                          ? () => widget.onApply(message.content)
-                          : null,
-                      c: c,
-                    );
-                  },
-                ),
-        ),
-        const SizedBox(height: 6),
-        Row(
-          crossAxisAlignment: CrossAxisAlignment.end,
-          children: [
-            Expanded(
-              child: TextField(
-                controller: _inputController,
-                maxLines: 3,
-                minLines: 1,
-                textInputAction: TextInputAction.newline,
-                style: TextStyle(color: c.text, fontSize: 13),
-                decoration: InputDecoration(
-                  hintText: '輸入訊息…',
-                  hintStyle: TextStyle(color: c.mute, fontSize: 13),
-                  isDense: true,
-                  contentPadding: const EdgeInsets.symmetric(
-                    horizontal: 12,
-                    vertical: 10,
-                  ),
-                ),
-              ),
-            ),
-            const SizedBox(width: 8),
-            IconButton(
-              tooltip: '送出',
-              icon: Icon(Icons.send, size: 20, color: c.blue),
-              onPressed: _busy ? null : _send,
-            ),
-          ],
-        ),
-      ],
-    );
-  }
-}
-
-class _ChatBubble extends StatelessWidget {
-  final String role;
-  final String content;
-  final bool busy;
-  final VoidCallback? onApply;
-  final ItouColors c;
-
-  const _ChatBubble({
-    required this.role,
-    required this.content,
-    required this.busy,
-    required this.onApply,
-    required this.c,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final isUser = role == 'user';
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 4),
-      child: Row(
-        mainAxisAlignment: isUser
-            ? MainAxisAlignment.end
-            : MainAxisAlignment.start,
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Flexible(
-            child: Container(
-              constraints: const BoxConstraints(maxWidth: 420),
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-              decoration: BoxDecoration(
-                color: isUser ? c.blue.withValues(alpha: 0.14) : c.inset,
-                border: Border.all(
-                  color: isUser ? c.blue.withValues(alpha: 0.35) : c.border,
-                ),
-                borderRadius: BorderRadius.circular(8),
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  if (busy)
-                    Padding(
-                      padding: const EdgeInsets.symmetric(vertical: 4),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          SizedBox(
-                            width: 12,
-                            height: 12,
-                            child: CircularProgressIndicator(
-                              strokeWidth: 2,
-                              color: c.blue,
-                            ),
-                          ),
-                          const SizedBox(width: 8),
-                          Text(
-                            'AI 思考中…',
-                            style: TextStyle(color: c.mute, fontSize: 11),
-                          ),
-                        ],
-                      ),
-                    ),
-                  SelectableText(
-                    content,
-                    style: TextStyle(
-                      color: c.text,
-                      fontSize: 12.5,
-                      height: 1.5,
-                    ),
-                  ),
-                  if (onApply != null) ...[
-                    const SizedBox(height: 4),
-                    GestureDetector(
-                      onTap: onApply,
-                      child: Text(
-                        '套用到編輯器',
-                        style: TextStyle(color: c.blue, fontSize: 11.5),
-                      ),
-                    ),
-                  ],
-                ],
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-/// A horizontally-scrolling row of Markdown formatting shortcuts, docked
-/// directly above the keyboard (it's the last child in the edit body's
-/// [Column], which the [Scaffold] pushes up above the software keyboard
-/// automatically) so common syntax doesn't have to be typed by hand.
-class _EditorToolbar extends StatelessWidget {
-  final ItouColors c;
-  final VoidCallback onHeading;
-  final VoidCallback onBold;
-  final VoidCallback onItalic;
-  final VoidCallback onStrikethrough;
-  final VoidCallback onInlineCode;
-  final VoidCallback onCodeBlock;
-  final VoidCallback onQuote;
-  final VoidCallback onBulletList;
-  final VoidCallback onNumberedList;
-  final VoidCallback onTaskList;
-  final VoidCallback onLink;
-  final VoidCallback onAi;
-
-  const _EditorToolbar({
-    required this.c,
-    required this.onHeading,
-    required this.onBold,
-    required this.onItalic,
-    required this.onStrikethrough,
-    required this.onInlineCode,
-    required this.onCodeBlock,
-    required this.onQuote,
-    required this.onBulletList,
-    required this.onNumberedList,
-    required this.onTaskList,
-    required this.onLink,
-    required this.onAi,
-  });
-
-  Widget _btn(IconData icon, String tooltip, VoidCallback onTap) {
-    return IconButton(
-      tooltip: tooltip,
-      icon: Icon(icon, size: 20),
-      color: c.text,
-      visualDensity: VisualDensity.compact,
-      constraints: const BoxConstraints(minWidth: 44, minHeight: 44),
-      // Toolbar taps must not steal keyboard focus from the TextField —
-      // handled by the callbacks themselves (they re-request focus after
-      // editing the controller), not by anything here.
-      onPressed: onTap,
-    );
-  }
-
-  /// The AI assistant button — visually set apart from the plain format
-  /// buttons so it reads as a distinct feature, not another toggle.
-  Widget _aiBtn() {
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Container(width: 1, height: 24, color: c.border),
-        const SizedBox(width: 6),
-        Tooltip(
-          message: 'AI 助理（潤飾／翻譯／改寫）',
-          child: Material(
-            color: c.blue,
-            borderRadius: BorderRadius.circular(8),
-            child: InkWell(
-              onTap: onAi,
-              borderRadius: BorderRadius.circular(8),
-              child: const SizedBox(
-                width: 40,
-                height: 40,
-                child: Icon(Icons.auto_awesome, size: 20, color: Colors.white),
-              ),
-            ),
-          ),
-        ),
-      ],
-    );
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      decoration: BoxDecoration(
-        color: c.panel,
-        border: Border(top: BorderSide(color: c.border)),
-      ),
-      child: SafeArea(
-        top: false,
-        child: SingleChildScrollView(
-          scrollDirection: Axis.horizontal,
-          padding: const EdgeInsets.symmetric(horizontal: 4),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              _btn(Icons.title, '標題', onHeading),
-              _btn(Icons.format_bold, '粗體', onBold),
-              _btn(Icons.format_italic, '斜體', onItalic),
-              _btn(Icons.strikethrough_s, '刪除線', onStrikethrough),
-              _btn(Icons.code, '行內程式碼', onInlineCode),
-              _btn(Icons.data_object, '程式碼區塊', onCodeBlock),
-              _btn(Icons.format_quote, '引用', onQuote),
-              _btn(Icons.format_list_bulleted, '項目清單', onBulletList),
-              _btn(Icons.format_list_numbered, '編號清單', onNumberedList),
-              _btn(Icons.check_box_outlined, '待辦清單', onTaskList),
-              _btn(Icons.link, '連結', onLink),
-              _aiBtn(),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _ReaderSettingsSheet extends StatefulWidget {
-  final ReaderPrefs prefs;
-  final ValueChanged<ReaderPrefs> onChanged;
-
-  const _ReaderSettingsSheet({required this.prefs, required this.onChanged});
-
-  @override
-  State<_ReaderSettingsSheet> createState() => _ReaderSettingsSheetState();
-}
-
-class _ReaderSettingsSheetState extends State<_ReaderSettingsSheet> {
-  late ReaderPrefs _prefs = widget.prefs;
-
-  void _update(ReaderPrefs next) {
-    setState(() => _prefs = next);
-    widget.onChanged(next);
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final c = ItouColorsExt.of(context);
-    final brightness = Theme.of(context).brightness;
-
-    return SafeArea(
-      child: Container(
-        margin: const EdgeInsets.all(12),
-        padding: const EdgeInsets.all(20),
-        decoration: BoxDecoration(
-          color: c.panel,
-          border: Border.all(color: c.border2),
-        ),
-        child: SingleChildScrollView(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              SectionLabel('字體'),
-              const SizedBox(height: 10),
-              ReaderFontPicker(
-                selected: _prefs.fontFamily,
-                onChanged: (f) => _update(_prefs.copyWith(fontFamily: f)),
-              ),
-              const SizedBox(height: 20),
-              Row(
-                children: [
-                  SectionLabel('字級'),
-                  const Spacer(),
-                  Text(
-                    _prefs.fontSize.toStringAsFixed(0),
-                    style: TextStyle(color: c.dim, fontSize: 12),
-                  ),
-                ],
-              ),
-              SliderTheme(
-                data: SliderThemeData(
-                  activeTrackColor: c.blue,
-                  inactiveTrackColor: c.border2,
-                  thumbColor: c.blue,
-                  overlayColor: c.blue.withValues(alpha: 0.15),
-                  trackHeight: 2,
-                ),
-                child: Slider(
-                  value: _prefs.fontSize,
-                  min: ReaderPrefs.minFontSize,
-                  max: ReaderPrefs.maxFontSize,
-                  divisions:
-                      ((ReaderPrefs.maxFontSize - ReaderPrefs.minFontSize) /
-                              0.5)
-                          .round(),
-                  onChanged: (v) => _update(_prefs.copyWith(fontSize: v)),
-                ),
-              ),
-              const SizedBox(height: 10),
-              SectionLabel('文字顏色'),
-              const SizedBox(height: 12),
-              ReaderColorRow(
-                selected: _prefs.textColor,
-                customColor: _prefs.customColor,
-                brightness: brightness,
-                onSwatch: (tc) => _update(_prefs.copyWith(textColor: tc)),
-                onCustom: _pickReaderColor,
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  /// Opens the shared HSV picker for the reader's custom text colour.
-  Future<void> _pickReaderColor() async {
-    final result = await showHsvColorPicker(
-      context,
-      initial: _prefs.customColor,
-    );
-    if (!mounted || result == null) return;
-    _update(
-      _prefs.copyWith(textColor: ReaderTextColor.custom, customColor: result),
-    );
   }
 }

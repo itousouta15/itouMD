@@ -310,13 +310,13 @@ class _LoginPageState extends State<_LoginPage> {
                         ? Icons.check_circle_outline
                         : Icons.radio_button_unchecked,
                     size: 18,
-                    color: _connected ? const Color(0xFF7FAE83) : c.mute,
+                    color: _connected ? ItouColors.success : c.mute,
                   ),
                   const SizedBox(width: 8),
                   Text(
                     _connected ? '已連結' : '尚未連結',
                     style: TextStyle(
-                      color: _connected ? const Color(0xFF7FAE83) : c.mute,
+                      color: _connected ? ItouColors.success : c.mute,
                       fontSize: 13,
                     ),
                   ),

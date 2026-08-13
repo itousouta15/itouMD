@@ -12,8 +12,6 @@ class MergeOutcome {
   const MergeOutcome(this.action, this.text);
 }
 
-const _kAddColor = Color(0xFF7FAE83);
-const _kDelColor = Color(0xFFE0777A);
 const _kMaxDiffLines = 6;
 
 /// Conflict resolution UI for the sync flow. Shows what the remote changed
@@ -213,12 +211,12 @@ class _SummaryPanel extends StatelessWidget {
               const Spacer(),
               Text(
                 '+$add 行',
-                style: const TextStyle(color: _kAddColor, fontSize: 12),
+                style: const TextStyle(color: ItouColors.success, fontSize: 12),
               ),
               const SizedBox(width: 10),
               Text(
                 '-$del 行',
-                style: const TextStyle(color: _kDelColor, fontSize: 12),
+                style: const TextStyle(color: ItouColors.danger, fontSize: 12),
               ),
             ],
           ),
@@ -256,12 +254,12 @@ class _AutoMergeSection extends StatelessWidget {
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
               decoration: BoxDecoration(
-                color: _kAddColor.withValues(alpha: 0.15),
+                color: ItouColors.success.withValues(alpha: 0.15),
                 borderRadius: BorderRadius.circular(4),
               ),
               child: Text(
                 '將自動合併',
-                style: const TextStyle(color: _kAddColor, fontSize: 10),
+                style: const TextStyle(color: ItouColors.success, fontSize: 10),
               ),
             ),
           ],
@@ -313,7 +311,7 @@ class _HunkDiffView extends StatelessWidget {
           for (final line in removedShown)
             _DiffLine(
               text: line,
-              color: _kDelColor,
+              color: ItouColors.danger,
               marker: '−',
               mono: mono,
               c: c,
@@ -321,13 +319,13 @@ class _HunkDiffView extends StatelessWidget {
           if (removed.length > removedShown.length)
             _DiffMoreLine(
               count: removed.length - removedShown.length,
-              color: _kDelColor,
+              color: ItouColors.danger,
               c: c,
             ),
           for (final line in addedShown)
             _DiffLine(
               text: line,
-              color: _kAddColor,
+              color: ItouColors.success,
               marker: '+',
               mono: mono,
               c: c,
@@ -335,7 +333,7 @@ class _HunkDiffView extends StatelessWidget {
           if (added.length > addedShown.length)
             _DiffMoreLine(
               count: added.length - addedShown.length,
-              color: _kAddColor,
+              color: ItouColors.success,
               c: c,
             ),
         ],

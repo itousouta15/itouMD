@@ -171,6 +171,19 @@ class ItouColors extends ThemeExtension<ItouColors> {
     final lightness = brightness == Brightness.dark ? 0.12 : 0.92;
     return hsl.withSaturation(saturation).withLightness(lightness).toColor();
   }
+
+  /// Fixed semantic status colors — shared across both light and dark theme
+  /// (unlike the palette above, these don't shift with the chosen accent).
+  static const success = Color(0xFF7FAE83);
+  static const warning = Color(0xFFAD8B5C);
+  static const danger = Color(0xFFE0777A);
+
+  /// Formats [c] as a `#rrggbb` CSS color literal.
+  static String hex6(Color c) {
+    int ch(double v) => (v * 255.0).round().clamp(0, 255);
+    String byte(double v) => ch(v).toRadixString(16).padLeft(2, '0');
+    return '#${byte(c.r)}${byte(c.g)}${byte(c.b)}';
+  }
 }
 
 class ItouTheme {
@@ -204,7 +217,7 @@ class ItouTheme {
         onSecondary: c.bg,
         surface: c.panel,
         onSurface: c.text,
-        error: const Color(0xFFE0777A),
+        error: ItouColors.danger,
         onError: c.bg,
       ),
       textTheme: textTheme,
