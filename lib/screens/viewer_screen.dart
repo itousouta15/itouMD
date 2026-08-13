@@ -295,7 +295,9 @@ class _ViewerScreenState extends State<ViewerScreen> {
     compute(convertMarkdownToHtml, markdown).then((html) {
       if (!mounted) return;
       final ctx = widget.githubLinkContext;
-      final rendered = ctx == null ? html : rewriteGithubRelativeLinks(html, ctx);
+      final rendered = ctx == null
+          ? html
+          : rewriteGithubRelativeLinks(html, ctx);
       setState(() => _html = rendered);
       // Land the reader on the line that was being edited. Rendered block
       // heights vary (images, LaTeX, code), so this is an approximate
