@@ -2,6 +2,7 @@ package me.itousouta.itou_md
 
 import android.content.Intent
 import android.net.Uri
+import android.os.Build
 import android.provider.Settings
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
@@ -27,6 +28,13 @@ class MainActivity : FlutterActivity() {
                         openUnknownAppSourcesSettings()
                         result.success(null)
                     }
+                    // The device's supported ABIs, most-preferred first (e.g.
+                    // ["arm64-v8a", "armeabi-v7a"]) — releases ship one APK
+                    // per ABI to avoid every install carrying every other
+                    // architecture's native code, so the updater needs this
+                    // to pick the matching asset.
+                    "supportedAbis" ->
+                        result.success(Build.SUPPORTED_ABIS.toList())
                     else -> result.notImplemented()
                 }
             }

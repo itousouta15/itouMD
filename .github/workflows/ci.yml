@@ -72,14 +72,18 @@ jobs:
           storeFile=../keystore.jks
           EOF
 
+      # Split per ABI instead of one universal APK: a device only ever uses
+      # one architecture's native code, so bundling all of them into a
+      # single APK roughly triples its size for no benefit to any one
+      # install. This is also what the release process ships.
       - name: Build APK
-        run: flutter build apk --release
+        run: flutter build apk --release --split-per-abi
 
-      - name: Upload APK artifact
+      - name: Upload APK artifacts
         uses: actions/upload-artifact@v4
         with:
           name: itouMD-apk
-          path: build/app/outputs/flutter-apk/app-release.apk
+          path: build/app/outputs/flutter-apk/app-*-release.apk
           if-no-files-found: error
 
   Build-iOS:

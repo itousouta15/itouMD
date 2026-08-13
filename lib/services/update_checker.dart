@@ -24,10 +24,14 @@ class UpdateInfo {
 
 /// Checks the GitHub release feed for a newer APK and drives the in-app
 /// download + install flow. The repo ships every version as a GitHub
-/// Release with a `itouMD-vX.Y.Z.apk` asset, so the public `releases/latest`
-/// endpoint is the source of truth for "is there an update".
+/// Release with one APK asset per ABI (`itouMD-vX.Y.Z-{abi}.apk`) rather
+/// than a single universal APK carrying every architecture's native code,
+/// so the public `releases/latest` endpoint is the source of truth for
+/// "is there an update" and [InstallHelper.supportedAbis] picks which
+/// asset actually matches this device.
 class UpdateChecker {
   static const _repo = 'itousouta15/itouMD';
+  static const _knownAbis = ['arm64-v8a', 'armeabi-v7a', 'x86_64'];
 
   /// Fetches the latest release and returns [UpdateInfo] only when its
   /// version is strictly newer than the installed one; `null` when the app
@@ -61,15 +65,33 @@ class UpdateChecker {
     final latest = tag.replaceFirst(RegExp(r'^v'), '');
     if (!_isNewer(latest, info.version)) return null;
 
-    String? apkUrl;
+    // Index every APK asset by whichever known ABI its filename mentions,
+    // and separately remember the first APK seen regardless — the
+    // fallback for an older release that only ever shipped one universal
+    // APK with no ABI in its name.
     final assets = json['assets'] as List? ?? const [];
+    final apkByAbi = <String, String>{};
+    String? firstApkUrl;
     for (final asset in assets) {
-      if (asset is Map<String, dynamic> &&
-          (asset['name'] as String? ?? '').endsWith('.apk')) {
-        apkUrl = asset['browser_download_url'] as String?;
+      if (asset is! Map<String, dynamic>) continue;
+      final name = asset['name'] as String? ?? '';
+      final url = asset['browser_download_url'] as String?;
+      if (!name.endsWith('.apk') || url == null) continue;
+      firstApkUrl ??= url;
+      for (final abi in _knownAbis) {
+        if (name.contains(abi)) apkByAbi[abi] = url;
+      }
+    }
+
+    String? apkUrl;
+    for (final abi in await InstallHelper.supportedAbis()) {
+      final match = apkByAbi[abi];
+      if (match != null) {
+        apkUrl = match;
         break;
       }
     }
+    apkUrl ??= firstApkUrl;
 
     return UpdateInfo(
       latestVersion: latest,
@@ -210,6 +232,22 @@ class InstallHelper {
       await _channel.invokeMethod<void>('openUnknownAppSourcesSettings');
     } catch (_) {
       // Best effort; the generic app-settings fallback lives in Kotlin.
+    }
+  }
+
+  /// This device's supported ABIs, most-preferred first (e.g.
+  /// `["arm64-v8a", "armeabi-v7a"]`) — used to pick the matching
+  /// per-architecture release asset. Empty on non-Android or if the
+  /// channel call fails, which callers treat as "no preference".
+  static Future<List<String>> supportedAbis() async {
+    if (!Platform.isAndroid) return const [];
+    try {
+      final result = await _channel.invokeMethod<List<Object?>>(
+        'supportedAbis',
+      );
+      return result?.whereType<String>().toList() ?? const [];
+    } catch (_) {
+      return const [];
     }
   }
 }
