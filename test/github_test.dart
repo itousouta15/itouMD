@@ -33,10 +33,26 @@ void main() {
       expect(ref.path, 'README.md');
     });
 
-    test('rejects non-github URLs and malformed paths', () {
+    test('falls back to the repo README for non-blob URLs under it', () {
+      // /tree, /issues, a trailing slash, etc. aren't a specific file link
+      // — pasting "the repo" almost always means "open its README".
+      for (final url in [
+        'https://github.com/o/r/tree/main',
+        'https://github.com/o/r/issues/1',
+        'https://github.com/o/r/',
+      ]) {
+        final ref = GithubApi.parseUrl(url);
+        expect(ref, isNotNull, reason: url);
+        expect(ref!.owner, 'o', reason: url);
+        expect(ref.repo, 'r', reason: url);
+        expect(ref.branch, isEmpty, reason: url);
+        expect(ref.path, 'README.md', reason: url);
+      }
+    });
+
+    test('rejects non-github URLs and paths without a repo', () {
       expect(GithubApi.parseUrl('https://hackmd.io/abc'), isNull);
       expect(GithubApi.parseUrl('https://github.com/only-owner'), isNull);
-      expect(GithubApi.parseUrl('https://github.com/o/r/issues/1'), isNull);
     });
   });
 }

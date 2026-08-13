@@ -46,6 +46,33 @@ class GithubFileRef {
   String get displayName => '$owner/$repo:${path.split('/').last}';
 }
 
+/// One entry from `GET /user/repos` — just enough to show a picker list.
+class GithubRepoSummary {
+  final String owner;
+  final String name;
+  final String? description;
+  final bool private;
+
+  const GithubRepoSummary({
+    required this.owner,
+    required this.name,
+    this.description,
+    required this.private,
+  });
+
+  String get fullName => '$owner/$name';
+
+  factory GithubRepoSummary.fromJson(Map<String, dynamic> json) {
+    final ownerJson = json['owner'] as Map<String, dynamic>?;
+    return GithubRepoSummary(
+      owner: ownerJson?['login'] as String? ?? '',
+      name: json['name'] as String? ?? '',
+      description: json['description'] as String?,
+      private: json['private'] as bool? ?? false,
+    );
+  }
+}
+
 /// Thin client for the GitHub REST API (Contents + repo metadata), used to
 /// write local edits back to files that were opened from `github.com` URLs.
 class GithubApi {
@@ -79,8 +106,12 @@ class GithubApi {
   }
 
   /// Parses a `github.com` URL into repo coordinates. Supports the blob
-  /// view (`/blob/{branch}/{path}`) and a bare repo URL (README.md on the
-  /// default branch). Returns null for anything else.
+  /// view (`/blob/{branch}/{path}`) for a specific file; any other URL
+  /// under that repo — the bare root, `/tree/...`, `/issues/...`, a
+  /// trailing slash, whatever page you happened to copy the link from —
+  /// resolves to the repo itself (README.md on the default branch), since
+  /// pasting "the repo" is almost always what's meant. Returns null only
+  /// when there isn't even an owner/repo to work with.
   static GithubFileRef? parseUrl(String url) {
     final uri = Uri.tryParse(url);
     if (uri == null || uri.host != 'github.com') return null;
@@ -88,9 +119,6 @@ class GithubApi {
     if (segments.length < 2) return null;
     final owner = segments[0];
     final repo = segments[1];
-    if (segments.length == 2) {
-      return GithubFileRef(owner: owner, repo: repo);
-    }
     if (segments.length >= 4 && segments[2] == 'blob') {
       return GithubFileRef(
         owner: owner,
@@ -99,7 +127,7 @@ class GithubApi {
         path: segments.sublist(4).join('/'),
       );
     }
-    return null;
+    return GithubFileRef(owner: owner, repo: repo);
   }
 
   /// Resolves the default branch of a repo.
@@ -188,6 +216,73 @@ class GithubApi {
     if (res.statusCode != 200 && res.statusCode != 201) {
       throw GithubApiException(_errorMessage(res), res.statusCode);
     }
+  }
+
+  /// Lists repos the authenticated user owns, collaborates on, or belongs
+  /// to via an org — most-recently-updated first, for a "pick a repo"
+  /// browser instead of typing `owner/repo` by hand.
+  static Future<List<GithubRepoSummary>> listRepos(
+    String token, {
+    int page = 1,
+    int perPage = 50,
+  }) async {
+    final res = await _request(
+      () => http.get(
+        Uri.parse(
+          '$_base/user/repos?sort=updated&per_page=$perPage&page=$page',
+        ),
+        headers: _headers(token),
+      ),
+    );
+    if (res.statusCode != 200) {
+      throw GithubApiException(_errorMessage(res), res.statusCode);
+    }
+    final list = jsonDecode(utf8.decode(res.bodyBytes)) as List;
+    return list
+        .map((e) => GithubRepoSummary.fromJson(e as Map<String, dynamic>))
+        .toList();
+  }
+
+  /// Fetches a repo's README via GitHub's dedicated readme endpoint, which
+  /// resolves the actual filename itself (`README.md`, `readme.md`,
+  /// `README`, ...) — unlike the Contents API used by [getFile], which
+  /// needs the exact case-sensitive path and 404s on a guess that's wrong.
+  /// Works unauthenticated for public repos; pass [token] when available
+  /// for private repos and higher rate limits.
+  static Future<GithubFile> getReadme(
+    GithubFileRef ref, {
+    String? token,
+    String? branch,
+  }) async {
+    final query = (branch ?? '').isNotEmpty ? '?ref=$branch' : '';
+    final headers = token != null && token.isNotEmpty
+        ? _headers(token)
+        : {
+            'Accept': 'application/vnd.github+json',
+            'X-GitHub-Api-Version': '2022-11-28',
+            'User-Agent': 'itouMD',
+          };
+    final res = await _request(
+      () => http.get(
+        Uri.parse('$_base/repos/${ref.owner}/${ref.repo}/readme$query'),
+        headers: headers,
+      ),
+    );
+    if (res.statusCode != 200) {
+      throw GithubApiException(_errorMessage(res), res.statusCode);
+    }
+    final json = jsonDecode(utf8.decode(res.bodyBytes)) as Map<String, dynamic>;
+    final content = json['content'] as String? ?? '';
+    final path = json['path'] as String? ?? ref.path;
+    final sha = json['sha'] as String?;
+    if (sha == null) {
+      throw GithubApiException('讀不到檔案的 SHA (´;ω;`)');
+    }
+    return GithubFile(
+      path: path,
+      content: utf8.decode(base64Decode(content), allowMalformed: true),
+      sha: sha,
+    );
   }
 
   /// Fetches the authenticated user's login — used to test a stored PAT.
