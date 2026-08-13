@@ -105,6 +105,17 @@ class GithubApi {
     });
   }
 
+  /// Decodes the Contents/README API's `content` field. GitHub always
+  /// chunks this base64 string with a newline every 60 characters — Dart's
+  /// `base64Decode` throws on embedded whitespace instead of ignoring it
+  /// like most decoders, so it has to be stripped first.
+  static String _decodeFileContent(String base64Content) {
+    return utf8.decode(
+      base64Decode(base64Content.replaceAll(RegExp(r'\s'), '')),
+      allowMalformed: true,
+    );
+  }
+
   /// Parses a `github.com` URL into repo coordinates. Supports the blob
   /// view (`/blob/{branch}/{path}`) for a specific file; any other URL
   /// under that repo — the bare root, `/tree/...`, `/issues/...`, a
@@ -183,7 +194,7 @@ class GithubApi {
     }
     return GithubFile(
       path: ref.path,
-      content: utf8.decode(base64Decode(content), allowMalformed: true),
+      content: _decodeFileContent(content),
       sha: sha,
     );
   }
@@ -280,7 +291,7 @@ class GithubApi {
     }
     return GithubFile(
       path: path,
-      content: utf8.decode(base64Decode(content), allowMalformed: true),
+      content: _decodeFileContent(content),
       sha: sha,
     );
   }
