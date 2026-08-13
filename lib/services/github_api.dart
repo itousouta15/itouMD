@@ -20,10 +20,18 @@ class GithubFile {
   final String content;
   final String sha;
 
+  /// `raw.githubusercontent.com/{owner}/{repo}/{ref}/{path}` — the Contents
+  /// and README APIs both include this, and it's the only place the actual
+  /// resolved ref (branch name or commit SHA) shows up when the caller
+  /// asked for "the default branch" rather than a specific one. Used to
+  /// resolve relative links/images inside the fetched content.
+  final String? downloadUrl;
+
   const GithubFile({
     required this.path,
     required this.content,
     required this.sha,
+    this.downloadUrl,
   });
 }
 
@@ -196,6 +204,7 @@ class GithubApi {
       path: ref.path,
       content: _decodeFileContent(content),
       sha: sha,
+      downloadUrl: json['download_url'] as String?,
     );
   }
 
@@ -293,6 +302,7 @@ class GithubApi {
       path: path,
       content: _decodeFileContent(content),
       sha: sha,
+      downloadUrl: json['download_url'] as String?,
     );
   }
 
