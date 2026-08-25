@@ -1,0 +1,15 @@
+name = "itoumd-site"
+compatibility_date = "2026-08-03"
+
+# Production domain. Deploying requires ownership of itousouta.me in the
+# Cloudflare account (same account as itoumd-llm-proxy); until then the site
+# is reachable at its workers.dev URL.
+routes = [{ pattern = "md.itousouta.me", custom_domain = true }]
+
+# Static-only Worker: no `main`, Cloudflare serves ./public directly.
+[assets]
+directory = "./public"
+not_found_handling = "404-page"
+
+[observability]
+enabled = true

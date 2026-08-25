@@ -1,0 +1,49 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>找不到這一頁 — itouMD</title>
+<link rel="icon" href="/logo.webp">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=Noto+Sans+TC:wght@400;500&display=swap">
+<style>
+:root{
+  --ground:#F2F3F7;--panel:#FFFFFF;--line:#D8DBE6;
+  --text:#1B1E23;--muted:#5C6273;--accent:#4A57B8;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --ground:#1B1E23;--panel:#222429;--line:#33373F;
+    --text:#E3E6EE;--muted:#959BAA;--accent:#B0BDF7;
+  }
+}
+*{box-sizing:border-box}
+body{
+  margin:0;min-height:100vh;background:var(--ground);color:var(--text);
+  font-family:"IBM Plex Mono","Noto Sans TC",ui-monospace,monospace;
+  display:grid;place-items:center;padding:24px;line-height:1.8;
+}
+main{max-width:44ch}
+.code{font-size:13px;letter-spacing:.1em;color:var(--accent);margin:0 0 14px}
+h1{font-size:24px;font-weight:600;margin:0 0 12px;letter-spacing:-.01em}
+p{color:var(--muted);font-size:15px;margin:0 0 26px}
+a{
+  display:inline-flex;gap:8px;align-items:center;text-decoration:none;
+  border:1px solid var(--line);border-radius:3px;padding:10px 17px;
+  font-size:14px;color:var(--text);background:var(--panel);
+}
+a:hover{border-color:var(--accent)}
+:focus-visible{outline:2px solid var(--accent);outline-offset:3px}
+</style>
+</head>
+<body>
+<main>
+  <p class="code">404</p>
+  <h1>找不到這一頁</h1>
+  <p>網址可能打錯了，或這個頁面已經搬走。itouMD 的內容全部都在首頁上。</p>
+  <a href="/">← 回首頁</a>
+</main>
+</body>
+</html>
