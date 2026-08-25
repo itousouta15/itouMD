@@ -4,8 +4,9 @@
 [![CI](https://github.com/itousouta15/itouMD/actions/workflows/ci.yml/badge.svg)](https://github.com/itousouta15/itouMD/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![Latest Release](https://img.shields.io/github/v/release/itousouta15/itouMD)](https://github.com/itousouta15/itouMD/releases/latest)
+[![Website](https://img.shields.io/badge/website-md.itousouta.me-9aa9e0)](https://md.itousouta.me)
 
-**English：[README_EN.md](README_EN.md)**
+**English：[README_EN.md](README_EN.md)** ｜ **官網：[md.itousouta.me](https://md.itousouta.me)**
 
 一款用於行動裝置的現代化 Markdown 檢視器與編輯器，深度整合 HackMD。
 
@@ -13,11 +14,11 @@
 
 | 精靈式介紹 | 首頁 | 檢視器 |
 | --- | --- | --- |
-| ![精靈式介紹](docs/screenshots/01-onboarding.png) | ![首頁](docs/screenshots/02-home.png) | ![檢視器](docs/screenshots/03-viewer.png) |
+| ![精靈式介紹](site/public/screenshots/01-onboarding.png) | ![首頁](site/public/screenshots/02-home.png) | ![檢視器](site/public/screenshots/03-viewer.png) |
 
 | 編輯模式 | 同步雲端 | 設定 |
 | --- | --- | --- |
-| ![編輯模式](docs/screenshots/04-editor.png) | ![HackMD](docs/screenshots/05-notes.png) | ![設定](docs/screenshots/06-settings.png) |
+| ![編輯模式](site/public/screenshots/04-editor.png) | ![HackMD](site/public/screenshots/05-notes.png) | ![設定](site/public/screenshots/06-settings.png) |
 
 ## 功能亮點
 

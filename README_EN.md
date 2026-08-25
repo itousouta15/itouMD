@@ -4,8 +4,9 @@
 [![CI](https://github.com/itousouta15/itouMD/actions/workflows/ci.yml/badge.svg)](https://github.com/itousouta15/itouMD/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![Latest Release](https://img.shields.io/github/v/release/itousouta15/itouMD)](https://github.com/itousouta15/itouMD/releases/latest)
+[![Website](https://img.shields.io/badge/website-md.itousouta.me-9aa9e0)](https://md.itousouta.me)
 
-**繁體中文：[README.md](README.md)**
+**繁體中文：[README.md](README.md)** ｜ **Website: [md.itousouta.me](https://md.itousouta.me)**
 
 A modern Markdown viewer and editor for mobile devices, deeply integrated with HackMD.
 
@@ -13,11 +14,11 @@ A modern Markdown viewer and editor for mobile devices, deeply integrated with H
 
 | Onboarding | Home | Viewer |
 | --- | --- | --- |
-| ![Onboarding](docs/screenshots/01-onboarding.png) | ![Home](docs/screenshots/02-home.png) | ![Viewer](docs/screenshots/03-viewer.png) |
+| ![Onboarding](site/public/screenshots/01-onboarding.png) | ![Home](site/public/screenshots/02-home.png) | ![Viewer](site/public/screenshots/03-viewer.png) |
 
 | Editor | Notes list | Settings |
 | --- | --- | --- |
-| ![Editor](docs/screenshots/04-editor.png) | ![HackMD notes](docs/screenshots/05-notes.png) | ![Settings](docs/screenshots/06-settings.png) |
+| ![Editor](site/public/screenshots/04-editor.png) | ![HackMD notes](site/public/screenshots/05-notes.png) | ![Settings](site/public/screenshots/06-settings.png) |
 
 ## Features
 
