@@ -9,7 +9,7 @@ site/
     ├── index.html         整站就這一頁（CSS／JS 內嵌）
     ├── logo.webp          由 assets/logo/logo_nbg.webp 複製而來
     ├── _headers           快取與安全標頭
-    └── screenshots/       實機截圖（README 也引用同一份）
+    └── screenshots/       實機截圖（*.png 由根目錄 README 引用，*.webp 給站台）
 ```
 
 ## 本機預覽
@@ -33,4 +33,16 @@ npx wrangler deploy
 ## 改內容
 
 `public/index.html` 是唯一的來源檔，沒有建置步驟——直接改、直接部署。
-換截圖的話覆蓋 `public/screenshots/` 底下同名檔案即可，根目錄的 README 引用的是同一份。
+
+## 換截圖
+
+覆蓋 `public/screenshots/` 底下的同名 `.png`（根目錄的 README 引用的就是這幾份），
+**接著要重產 `.webp`**——站台上的 `<picture>` 優先吃 WebP，只留 PNG 會看到舊畫面：
+
+```bash
+cd site/public/screenshots
+npx sharp-cli -i "*.png" -o . resize 900 --withoutEnlargement -- --format webp --quality 76
+```
+
+900px 寬是照網頁上最寬的顯示尺寸（290 CSS px）抓 3 倍算的，六張加起來約 240 KB，
+PNG 原檔約 1 MB——手機上差很多，所以別省這一步。
