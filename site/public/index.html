@@ -2,7 +2,7 @@
 <html lang="zh-Hant">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>itouMD</title>
 <meta name="description" content="itouMD — 手機上的 Markdown 檢視器與編輯器，深度整合 HackMD 與 GitHub，改完直接同步回去。">
 <link rel="canonical" href="https://md.itousouta.me/">
@@ -15,6 +15,7 @@
 <meta name="theme-color" content="#F4F5F9" media="(prefers-color-scheme: light)">
 <meta name="theme-color" content="#16181C" media="(prefers-color-scheme: dark)">
 <link rel="icon" href="logo.webp">
+<link rel="preload" as="image" href="screenshots/02-home.webp" type="image/webp" fetchpriority="high">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700&family=Noto+Sans+TC:wght@400;500;700&display=swap">
@@ -46,6 +47,11 @@
   --mono:"IBM Plex Mono","Noto Sans TC",ui-monospace,SFMono-Regular,Menlo,monospace;
   --sans:"IBM Plex Sans","Noto Sans TC",-apple-system,"Segoe UI",sans-serif;
   --wrap:1140px;
+  --head-h:64px;
+  --pad:26px;
+}
+@media(max-width:640px){
+  :root{--head-h:56px;--pad:20px}
 }
 @media (prefers-color-scheme: dark){
   :root:not([data-theme="light"]){
@@ -100,12 +106,20 @@ html{-webkit-text-size-adjust:100%;scroll-behavior:smooth}
 body{
   margin:0;background:var(--ground);color:var(--text);
   font-family:var(--sans);font-size:16px;line-height:1.75;letter-spacing:.01em;
-  overflow-x:hidden;
+  overflow-x:hidden;overflow-wrap:break-word;
+  -webkit-tap-highlight-color:transparent;   /* 點下去不要那塊藍框 */
 }
 a{color:inherit}
 img{max-width:100%;height:auto;display:block}   /* height:auto — 別再讓截圖被拉伸 */
+picture{display:block}
 :focus-visible{outline:2px solid var(--accent);outline-offset:3px;border-radius:3px}
-.wrap{max-width:var(--wrap);margin:0 auto;padding:0 26px}
+.wrap{
+  max-width:var(--wrap);margin:0 auto;
+  padding-left:max(var(--pad),env(safe-area-inset-left,0px));
+  padding-right:max(var(--pad),env(safe-area-inset-right,0px));
+}
+/* 跳錨點時別被吸頂的 header 蓋住 */
+[id]{scroll-margin-top:calc(var(--head-h) + 14px)}
 
 .eyebrow{
   font-family:var(--mono);font-size:12px;font-weight:500;letter-spacing:.14em;
@@ -129,23 +143,58 @@ p{margin:0}
   .head{background:color-mix(in srgb,var(--ground) 82%,transparent);backdrop-filter:blur(14px) saturate(1.4)}
 }
 .head.stuck{border-bottom-color:var(--line)}
-.head .wrap{display:flex;align-items:center;gap:22px;height:64px}
-.brand{display:flex;align-items:center;gap:11px;text-decoration:none;flex:0 0 auto}
+.head > .wrap{display:flex;align-items:center;gap:22px;height:var(--head-h)}
+.brand{display:flex;align-items:center;gap:11px;text-decoration:none;flex:0 0 auto;min-height:44px}
 .brand img{height:28px;width:auto;border-radius:7px}
 .brand b{font-family:var(--mono);font-weight:600;font-size:17px;letter-spacing:-.02em}
 .navlinks{display:flex;gap:26px;margin-left:auto;font-size:14px}
 .navlinks a{color:var(--muted);text-decoration:none;transition:color .16s}
-.navlinks a:hover{color:var(--text)}
+@media(hover:hover){.navlinks a:hover{color:var(--text)}}
 .headact{display:flex;align-items:center;gap:9px;flex:0 0 auto}
 .iconbtn{
+  position:relative;
   width:34px;height:34px;display:grid;place-items:center;
   border:1px solid var(--line);border-radius:8px;background:transparent;
   color:var(--muted);cursor:pointer;padding:0;
   transition:border-color .16s,color .16s,background .16s;
 }
-.iconbtn:hover{color:var(--text);border-color:var(--accent);background:var(--accent-soft)}
+.iconbtn::after{content:"";position:absolute;inset:-5px}   /* 觸控熱區補到 44px */
 .iconbtn svg{width:16px;height:16px}
-@media(max-width:900px){.navlinks{display:none}}
+.iconbtn[aria-expanded="true"]{color:var(--text);border-color:var(--accent);background:var(--accent-soft)}
+@media(hover:hover){
+  .iconbtn:hover{color:var(--text);border-color:var(--accent);background:var(--accent-soft)}
+}
+
+/* 收合選單：桌機不存在，900px 以下才接手被藏起來的 navlinks */
+.menubtn,.sheet{display:none}
+.menubtn .i-close{display:none}
+.head.open .menubtn .i-open{display:none}
+.head.open .menubtn .i-close{display:block}
+@media(max-width:900px){
+  .navlinks{display:none}
+  .headact{margin-left:auto;gap:12px}   /* 熱區之間留點縫，別互相搶點擊 */
+  .menubtn{display:grid}
+  .sheet{
+    display:block;position:absolute;left:0;right:0;top:100%;
+    background:var(--panel);border-bottom:1px solid var(--line);
+    box-shadow:0 20px 36px -24px var(--shadow);
+    max-height:0;overflow:hidden;visibility:hidden;
+    transition:max-height .24s ease,visibility 0s linear .24s;
+  }
+  .head.open .sheet{
+    max-height:min(76vh,520px);overflow-y:auto;visibility:visible;
+    transition:max-height .26s ease,visibility 0s;
+  }
+  .sheet .wrap{display:flex;flex-direction:column;padding-top:6px;padding-bottom:18px}
+  .sheet a:not(.btn){
+    display:flex;align-items:center;justify-content:space-between;gap:12px;
+    min-height:52px;text-decoration:none;color:var(--text);font-size:16px;
+    border-bottom:1px solid var(--line-soft);
+  }
+  .sheet a:not(.btn):active{color:var(--accent)}
+  .sheet a:not(.btn) svg{width:15px;height:15px;color:var(--faint);flex:0 0 auto}
+  .sheet .btn{margin-top:16px;min-height:52px;justify-content:center}
+}
 
 /* ══════════════════════════  buttons  ══════════════════════════ */
 .btn{
@@ -155,13 +204,18 @@ p{margin:0}
   border:1px solid var(--line);color:var(--text);background:var(--panel);
   transition:border-color .16s,transform .16s,box-shadow .16s;
 }
-.btn:hover{border-color:var(--accent);transform:translateY(-2px);box-shadow:0 8px 20px -10px var(--shadow)}
+@media(hover:hover){
+  .btn:hover{border-color:var(--accent);transform:translateY(-2px);box-shadow:0 8px 20px -10px var(--shadow)}
+}
+.btn:active{transform:scale(.985)}
 .btn-primary{
   background:linear-gradient(140deg,var(--accent-2),var(--accent));
   border-color:transparent;color:var(--on-accent);
   box-shadow:0 10px 26px -12px var(--glow);
 }
-.btn-primary:hover{filter:brightness(1.06);border-color:transparent}
+@media(hover:hover){
+  .btn-primary:hover{filter:brightness(1.06);border-color:transparent}
+}
 .btn svg{width:16px;height:16px;flex:0 0 auto}
 
 /* ══════════════════════════  device frame  ══════════════════════════ */
@@ -176,7 +230,7 @@ p{margin:0}
 .device img{border-radius:22px;width:100%;background:var(--panel-2)}
 
 /* ══════════════════════════  hero  ══════════════════════════ */
-.hero{position:relative;padding:clamp(52px,8vw,92px) 0 clamp(60px,8vw,104px);overflow:hidden}
+.hero{position:relative;padding:clamp(38px,8vw,92px) 0 clamp(48px,8vw,104px);overflow:hidden}
 .hero::before{
   content:"";position:absolute;top:-320px;right:-160px;
   width:900px;height:900px;border-radius:50%;pointer-events:none;
@@ -190,7 +244,7 @@ p{margin:0}
 @media(max-width:900px){.herogrid{grid-template-columns:1fr;gap:48px}}
 
 .hero h1{
-  font-weight:700;font-size:clamp(34px,6.2vw,58px);line-height:1.16;
+  font-weight:700;font-size:clamp(30px,6.8vw,58px);line-height:1.16;
   letter-spacing:-.038em;margin:0;text-wrap:balance;
 }
 .hero h1 .kao{
@@ -200,6 +254,10 @@ p{margin:0}
 .pitch{max-width:50ch;color:var(--muted);font-size:17.5px;line-height:1.8;margin-top:24px}
 .pitch strong{color:var(--text);font-weight:600}
 .cta{display:flex;flex-wrap:wrap;gap:12px;margin-top:34px}
+@media(max-width:430px){
+  .cta{gap:10px;margin-top:28px}
+  .cta .btn{flex:1 1 100%;justify-content:center}   /* 拇指按得到的寬度 */
+}
 .meta{
   font-family:var(--mono);font-size:12.5px;color:var(--faint);
   margin-top:22px;display:flex;flex-wrap:wrap;gap:6px 12px;align-items:center;
@@ -226,7 +284,7 @@ p{margin:0}
 @media(max-width:800px){.usecards{grid-template-columns:1fr}}
 .usecard{
   border:1px solid var(--line);border-radius:14px;background:var(--panel);
-  padding:26px 26px 28px;
+  padding:clamp(20px,5vw,26px) clamp(20px,5vw,26px) clamp(22px,5vw,28px);
 }
 .usecard .ic{
   width:36px;height:36px;border-radius:10px;display:grid;place-items:center;
@@ -263,7 +321,7 @@ p{margin:0}
 .ticks svg{width:16px;height:16px;color:var(--accent);margin-top:5px}
 .ticks b{color:var(--text);font-weight:600}
 code{
-  font-family:var(--mono);font-size:.86em;
+  font-family:var(--mono);font-size:.86em;overflow-wrap:break-word;
   background:var(--accent-soft);color:var(--accent);padding:1.5px 6px;border-radius:5px;
 }
 
@@ -276,26 +334,31 @@ code{
 }
 .merge-bar{
   display:flex;align-items:center;justify-content:space-between;gap:12px;
-  padding:12px 18px;border-bottom:1px solid var(--line);background:var(--panel-2);
+  flex-wrap:wrap;
+  padding:12px clamp(14px,4vw,18px);border-bottom:1px solid var(--line);background:var(--panel-2);
   font-family:var(--mono);font-size:12.5px;color:var(--faint);
 }
 .chip{
   font-family:var(--mono);font-size:11px;letter-spacing:.06em;border-radius:20px;
   border:1px solid var(--del-fg);color:var(--del-fg);background:var(--del-bg);padding:2px 11px;
 }
-.dl{font-family:var(--mono);font-size:13.5px;line-height:2.1;overflow-x:auto;padding:8px 0}
-.dl .r{display:block;white-space:pre;padding:0 18px}
+.dl{
+  font-family:var(--mono);font-size:13.5px;line-height:2.1;padding:8px 0;
+  overflow-x:auto;overscroll-behavior-x:contain;-webkit-overflow-scrolling:touch;
+}
+.dl .r{display:block;white-space:pre;padding:0 clamp(14px,4vw,18px)}
+@media(max-width:520px){.dl{font-size:12px;line-height:1.95}}
 .dl .r.add{background:var(--add-bg);color:var(--add-fg)}
 .dl .r.del{background:var(--del-bg);color:var(--del-fg)}
 .dl .r.ctx{color:var(--muted)}
 .conflict{border-top:1px solid var(--line)}
 .conflict-head{
   font-family:var(--mono);font-size:11.5px;letter-spacing:.08em;
-  padding:9px 18px;color:var(--del-fg);background:var(--del-bg);
+  padding:9px clamp(14px,4vw,18px);color:var(--del-fg);background:var(--del-bg);
 }
 .choice{display:grid;grid-template-columns:1fr 1fr}
 @media(max-width:660px){.choice{grid-template-columns:1fr}}
-.opt{padding:15px 18px 17px}
+.opt{padding:15px clamp(14px,4vw,18px) 17px}
 .opt+.opt{border-left:1px solid var(--line)}
 @media(max-width:660px){.opt+.opt{border-left:0;border-top:1px solid var(--line)}}
 .opt .lbl{
@@ -309,7 +372,7 @@ code{
 .opt .line{font-family:var(--mono);font-size:13.5px;line-height:1.8;color:var(--text)}
 .merge-foot{
   display:flex;flex-wrap:wrap;gap:12px;align-items:center;
-  padding:15px 18px;border-top:1px solid var(--line);font-size:13px;color:var(--faint);
+  padding:15px clamp(14px,4vw,18px);border-top:1px solid var(--line);font-size:13px;color:var(--faint);
 }
 .merge-foot .go{
   background:linear-gradient(140deg,var(--accent-2),var(--accent));color:var(--on-accent);
@@ -326,9 +389,12 @@ code{
 @media(max-width:800px){.pair{grid-template-columns:1fr}}
 .card{
   border:1px solid var(--line);border-radius:14px;background:var(--panel);
-  padding:30px 30px 32px;transition:border-color .18s,transform .18s;
+  padding:clamp(22px,5.5vw,30px) clamp(22px,5.5vw,30px) clamp(24px,5.5vw,32px);
+  transition:border-color .18s,transform .18s;
 }
-.card:hover{border-color:var(--accent);transform:translateY(-3px)}
+@media(hover:hover){
+  .card:hover{border-color:var(--accent);transform:translateY(-3px)}
+}
 .card .ic{
   width:38px;height:38px;border-radius:10px;display:grid;place-items:center;
   background:var(--accent-soft);color:var(--accent);margin-bottom:18px;
@@ -344,7 +410,7 @@ code{
 @media(max-width:800px){.plats{grid-template-columns:1fr}}
 .plat{
   border:1px solid var(--line);border-radius:14px;background:var(--panel);
-  padding:30px;display:flex;flex-direction:column;gap:16px;
+  padding:clamp(22px,5.5vw,30px);display:flex;flex-direction:column;gap:16px;
 }
 .plat.lead{
   border:1px solid transparent;
@@ -371,34 +437,75 @@ code{
 .opensec{padding:clamp(56px,8vw,96px) 0;border-top:1px solid var(--line);background:var(--ground-2)}
 .facts{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:22px;margin-top:34px}
 @media(max-width:800px){.facts{grid-template-columns:1fr;gap:18px}}
-.fact{border:1px solid var(--line);border-radius:14px;padding:26px;background:var(--panel)}
+.fact{border:1px solid var(--line);border-radius:14px;padding:clamp(20px,5vw,26px);background:var(--panel)}
 .fact h3{font-size:16px;font-weight:600;margin-bottom:10px}
 .fact p{font-size:14.5px;color:var(--muted);line-height:1.75}
 
 /* ══════════════════════════  footer  ══════════════════════════ */
 footer{border-top:1px solid var(--line);background:var(--panel)}
 .foot-top{
-  padding:clamp(48px,7vw,72px) 0 44px;
+  padding-block:clamp(48px,7vw,72px) 44px;   /* 用簡寫會蓋掉 .wrap 的左右留白 */
   display:grid;grid-template-columns:minmax(0,1.4fr) repeat(3,minmax(0,1fr));
   gap:32px;align-items:start;
 }
-@media(max-width:760px){.foot-top{grid-template-columns:1fr 1fr;row-gap:36px}}
-@media(max-width:460px){.foot-top{grid-template-columns:1fr}}
+
 .foot-brand{display:flex;align-items:center;gap:12px;margin-bottom:16px}
 .foot-brand img{height:32px;width:auto;border-radius:8px}
 .foot-brand b{font-family:var(--mono);font-size:19px;font-weight:600;letter-spacing:-.02em}
-.foot-about{grid-column:1;}
-@media(max-width:760px){.foot-about{grid-column:1 / -1}}
+.foot-about{grid-column:1}
 .foot-tag{color:var(--muted);font-size:15px;max-width:42ch;line-height:1.8}
+.dev{margin-top:24px}
+.dev-label{
+  display:block;font-family:var(--mono);color:var(--faint);font-size:11px;
+  letter-spacing:.12em;text-transform:uppercase;margin-bottom:8px;
+}
+.dev-name{font-family:var(--mono);font-size:15.5px;font-weight:600;letter-spacing:-.01em}
+.dev-links{display:flex;flex-wrap:wrap;gap:2px 18px;margin-top:9px}
+.dev-links a{
+  display:inline-flex;align-items:center;gap:7px;
+  color:var(--muted);text-decoration:none;font-size:14px;transition:color .15s;
+}
+.dev-links a svg{width:14px;height:14px;color:var(--faint);flex:0 0 auto;transition:color .15s}
+@media(hover:hover){
+  .dev-links a:hover,.dev-links a:hover svg{color:var(--accent)}
+}
+@media(max-width:900px){
+  .dev-links{gap:0 20px}
+  .dev-links a{min-height:44px}
+}
 .foot-top nav{display:flex;flex-direction:column;gap:10px}
 .foot-top nav span{
   font-family:var(--mono);color:var(--faint);font-size:11px;
   letter-spacing:.12em;text-transform:uppercase;margin-bottom:2px;
 }
 .foot-top nav a{color:var(--muted);text-decoration:none;font-size:14.5px;transition:color .15s}
-.foot-top nav a:hover{color:var(--accent)}
+@media(hover:hover){.foot-top nav a:hover{color:var(--accent)}}
+@media(max-width:900px){
+  .foot-top nav{gap:2px}
+  .foot-top nav span{margin-bottom:6px}
+  .foot-top nav a{min-height:44px;display:flex;align-items:center}
+  .back-top{min-height:44px}
+}
+
+/* 手機：三組導覽併成兩欄，別讓 footer 拉成一條長尾巴 */
+@media(max-width:760px){
+  .foot-top{
+    grid-template-columns:repeat(3,minmax(0,1fr));
+    gap:26px 14px;padding-bottom:32px;
+  }
+  .foot-about{
+    grid-column:1 / -1;
+    padding-bottom:26px;border-bottom:1px solid var(--line-soft);
+  }
+  .foot-tag{font-size:14.5px}
+}
+/* 再窄下去 GitHub Repo 會被擠到換行，退回兩欄 */
+@media(max-width:359px){
+  .foot-top{grid-template-columns:repeat(2,minmax(0,1fr));gap:24px 18px}
+}
 .foot-bottom{
-  border-top:1px solid var(--line-soft);padding:26px 0 clamp(40px,6vw,56px);
+  border-top:1px solid var(--line-soft);
+  padding-block:26px calc(clamp(40px,6vw,56px) + env(safe-area-inset-bottom,0px));
   display:flex;flex-wrap:wrap;gap:16px 28px;align-items:center;justify-content:space-between;
 }
 .foot-legal{font-family:var(--mono);font-size:12.5px;color:var(--faint)}
@@ -408,7 +515,16 @@ footer{border-top:1px solid var(--line);background:var(--panel)}
   display:inline-flex;align-items:center;gap:7px;font-family:var(--mono);font-size:12.5px;
   color:var(--muted);text-decoration:none;flex:0 0 auto;
 }
-.back-top:hover{color:var(--accent)}
+@media(max-width:760px){
+  .foot-bottom{gap:20px;padding-top:22px}
+  .foot-thanks{font-size:12.5px;line-height:1.75}
+  .back-top{
+    flex:1 1 100%;justify-content:center;min-height:48px;
+    border:1px solid var(--line);border-radius:10px;
+  }
+  .back-top:active{border-color:var(--accent);color:var(--accent)}
+}
+@media(hover:hover){.back-top:hover{color:var(--accent)}}
 .back-top svg{width:13px;height:13px}
 
 /* ══════════════════════════  reveal  ══════════════════════════ */
@@ -439,6 +555,24 @@ footer{border-top:1px solid var(--line);background:var(--panel)}
       </button>
       <a class="iconbtn" href="https://github.com/itousouta15/itouMD" aria-label="GitHub 原始碼">
         <svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 .5a12 12 0 0 0-3.8 23.4c.6.1.8-.3.8-.6v-2c-3.3.7-4-1.6-4-1.6-.6-1.4-1.4-1.8-1.4-1.8-1.1-.7 0-.7 0-.7 1.2.1 1.9 1.2 1.9 1.2 1.1 1.9 2.9 1.3 3.6 1 .1-.8.4-1.3.8-1.6-2.7-.3-5.5-1.3-5.5-5.9 0-1.3.5-2.4 1.2-3.2-.1-.3-.5-1.5.1-3.2 0 0 1-.3 3.3 1.2a11.5 11.5 0 0 1 6 0C17.3 4.7 18.3 5 18.3 5c.6 1.7.2 2.9.1 3.2.8.8 1.2 1.9 1.2 3.2 0 4.6-2.8 5.6-5.5 5.9.4.4.8 1.1.8 2.2v3.3c0 .3.2.7.8.6A12 12 0 0 0 12 .5z"/></svg>
+      </a>
+      <button class="iconbtn menubtn" id="menubtn" type="button"
+              aria-label="開啟選單" aria-expanded="false" aria-controls="sheet">
+        <svg class="i-open" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 7h16M4 12h16M4 17h16"/></svg>
+        <svg class="i-close" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6 18 18M18 6 6 18"/></svg>
+      </button>
+    </div>
+  </div>
+
+  <div class="sheet" id="sheet">
+    <div class="wrap">
+      <a href="#features">功能<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg></a>
+      <a href="#merge">衝突合併<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg></a>
+      <a href="#download">下載<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg></a>
+      <a href="#open">開源<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg></a>
+      <a class="btn btn-primary" href="https://github.com/itousouta15/itouMD/releases/latest">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v13m0 0 4.5-4.5M12 16l-4.5-4.5M4 20h16"/></svg>
+        下載 Android APK
       </a>
     </div>
   </div>
@@ -472,10 +606,10 @@ footer{border-top:1px solid var(--line);background:var(--panel)}
 
       <div class="stage">
         <div class="back">
-          <div class="device"><img src="screenshots/01-onboarding.png" alt="itouMD 首次啟動的精靈式介紹畫面" width="1080" height="2424"></div>
+          <div class="device"><picture><source srcset="screenshots/01-onboarding.webp" type="image/webp"><img src="screenshots/01-onboarding.png" alt="itouMD 首次啟動的精靈式介紹畫面" width="1080" height="2424"></picture></div>
         </div>
         <div class="front">
-          <div class="device"><img src="screenshots/02-home.png" alt="itouMD 首頁：貼上文字、選擇檔案、貼上網址、瀏覽 HackMD 筆記" width="1080" height="2424" fetchpriority="high"></div>
+          <div class="device"><picture><source srcset="screenshots/02-home.webp" type="image/webp"><img src="screenshots/02-home.png" alt="itouMD 首頁：貼上文字、選擇檔案、貼上網址、瀏覽 HackMD 筆記" width="1080" height="2424" fetchpriority="high"></picture></div>
         </div>
       </div>
     </div>
@@ -522,7 +656,7 @@ footer{border-top:1px solid var(--line);background:var(--panel)}
         </ul>
       </div>
       <div class="shot">
-        <div class="device"><img src="screenshots/03-viewer.png" alt="檢視器畫面：渲染後的標題、表格與帶行號的程式碼區塊" loading="lazy" width="1080" height="2424"></div>
+        <div class="device"><picture><source srcset="screenshots/03-viewer.webp" type="image/webp"><img src="screenshots/03-viewer.png" alt="檢視器畫面：渲染後的標題、表格與帶行號的程式碼區塊" loading="lazy" width="1080" height="2424"></picture></div>
       </div>
     </section>
 
@@ -542,7 +676,7 @@ footer{border-top:1px solid var(--line);background:var(--panel)}
         </ul>
       </div>
       <div class="shot">
-        <div class="device"><img src="screenshots/04-editor.png" alt="編輯模式：左側行號欄與下方格式工具列" loading="lazy" width="1080" height="2424"></div>
+        <div class="device"><picture><source srcset="screenshots/04-editor.webp" type="image/webp"><img src="screenshots/04-editor.png" alt="編輯模式：左側行號欄與下方格式工具列" loading="lazy" width="1080" height="2424"></picture></div>
       </div>
     </section>
 
@@ -562,7 +696,7 @@ footer{border-top:1px solid var(--line);background:var(--panel)}
         </ul>
       </div>
       <div class="shot">
-        <div class="device"><img src="screenshots/05-notes.png" alt="HackMD 筆記清單，個人筆記與團隊筆記分組顯示" loading="lazy" width="1080" height="2424"></div>
+        <div class="device"><picture><source srcset="screenshots/05-notes.webp" type="image/webp"><img src="screenshots/05-notes.png" alt="HackMD 筆記清單，個人筆記與團隊筆記分組顯示" loading="lazy" width="1080" height="2424"></picture></div>
       </div>
     </section>
 
@@ -582,7 +716,7 @@ footer{border-top:1px solid var(--line);background:var(--panel)}
         </ul>
       </div>
       <div class="shot">
-        <div class="device"><img src="screenshots/06-settings.png" alt="設定頁：外觀、閱讀偏好、同步、帳號等分類" loading="lazy" width="1080" height="2424"></div>
+        <div class="device"><picture><source srcset="screenshots/06-settings.webp" type="image/webp"><img src="screenshots/06-settings.png" alt="設定頁：外觀、閱讀偏好、同步、帳號等分類" loading="lazy" width="1080" height="2424"></picture></div>
       </div>
     </section>
 
@@ -747,7 +881,7 @@ footer{border-top:1px solid var(--line);background:var(--panel)}
   <div class="wrap foot-top">
     <div class="foot-about">
       <div class="foot-brand"><img src="logo.webp" alt=""><b>itouMD</b></div>
-      <p class="foot-tag">手機上的 Markdown 檢視器與編輯器，深度整合 HackMD 與 GitHub。由 itousouta 開發，MIT 授權。</p>
+      <p class="foot-tag">手機上的 Markdown 檢視器與編輯器，深度整合 HackMD 與 GitHub。MIT 授權。</p>
     </div>
     <nav>
       <span>專案</span>
@@ -796,8 +930,27 @@ footer{border-top:1px solid var(--line);background:var(--panel)}
     try { localStorage.setItem('itoumd-theme', next); } catch (e) {}
   });
 
-  // 捲動之後才給 header 一條底線
   var head = document.getElementById('head');
+
+  // 小螢幕的收合選單
+  var mbtn = document.getElementById('menubtn');
+  var sheet = document.getElementById('sheet');
+  var setMenu = function(open){
+    head.classList.toggle('open', open);
+    mbtn.setAttribute('aria-expanded', open ? 'true' : 'false');
+    mbtn.setAttribute('aria-label', open ? '關閉選單' : '開啟選單');
+  };
+  mbtn.addEventListener('click', function(){ setMenu(!head.classList.contains('open')); });
+  sheet.addEventListener('click', function(e){ if (e.target.closest('a')) setMenu(false); });
+  document.addEventListener('click', function(e){
+    if (head.classList.contains('open') && !head.contains(e.target)) setMenu(false);
+  });
+  document.addEventListener('keydown', function(e){ if (e.key === 'Escape') setMenu(false); });
+  var wide = matchMedia('(min-width:901px)');
+  var onWide = function(e){ if (e.matches) setMenu(false); };
+  if (wide.addEventListener) wide.addEventListener('change', onWide); else wide.addListener(onWide);
+
+  // 捲動之後才給 header 一條底線
   var onScroll = function(){ head.classList.toggle('stuck', window.scrollY > 8); };
   addEventListener('scroll', onScroll, { passive: true });
   onScroll();
