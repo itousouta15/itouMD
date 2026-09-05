@@ -72,6 +72,28 @@ class MainActivity : FlutterActivity() {
                             result.error("write_failed", e.message, null)
                         }
                     }
+                    // ACTION_OPEN_DOCUMENT results carry a persistable grant; taking
+                    // it keeps the uri writable after the app process dies, so the
+                    // identifier saved in recent docs can still be written back to.
+                    "persistUriPermission" -> {
+                        val uri = call.argument<String>("uri")
+                        if (uri == null) {
+                            result.error("bad_args", "uri missing", null)
+                            return@setMethodCallHandler
+                        }
+                        try {
+                            contentResolver.takePersistableUriPermission(
+                                Uri.parse(uri),
+                                Intent.FLAG_GRANT_READ_URI_PERMISSION or
+                                    Intent.FLAG_GRANT_WRITE_URI_PERMISSION
+                            )
+                            result.success(null)
+                        } catch (e: Exception) {
+                            // Some providers don't grant persistable permission;
+                            // the session grant is still valid for now.
+                            result.success(false)
+                        }
+                    }
                     else -> result.notImplemented()
                 }
             }
