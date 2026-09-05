@@ -455,9 +455,7 @@ class _ViewerScreenState extends State<ViewerScreen> {
         );
       case LocalSaveResult.unsupported:
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('這個裝置無法直接寫回原檔，請用「另存新檔」儲存 (´;ω;`)'),
-          ),
+          const SnackBar(content: Text('這個裝置無法直接寫回原檔，請用「另存新檔」儲存 (´;ω;`)')),
         );
     }
   }
@@ -474,9 +472,7 @@ class _ViewerScreenState extends State<ViewerScreen> {
           controller: controller,
           autofocus: true,
           maxLines: 3,
-          decoration: const InputDecoration(
-            hintText: '寫一段 commit message…',
-          ),
+          decoration: const InputDecoration(hintText: '寫一段 commit message…'),
         ),
         actions: [
           TextButton(
