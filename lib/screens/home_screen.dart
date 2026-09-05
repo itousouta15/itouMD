@@ -10,6 +10,7 @@ import '../services/github_api.dart';
 import '../services/github_link_rewriter.dart';
 import '../services/hackmd_account.dart';
 import '../services/hackmd_api.dart';
+import '../services/local_file_saver.dart';
 import '../services/markdown_source.dart';
 import '../services/recent_docs.dart';
 import '../services/theme_prefs.dart';
@@ -109,6 +110,8 @@ class _HomeScreenState extends State<HomeScreen> {
         content: content,
         source: source,
         sourceRef: sourceRef,
+        localPath: localPath,
+        localUri: localUri,
         openedAt: DateTime.now(),
       ),
     );
@@ -163,6 +166,10 @@ class _HomeScreenState extends State<HomeScreen> {
         return;
       }
       final text = utf8.decode(bytes, allowMalformed: true);
+      if (!mounted) return;
+      // Keep the picked file's write grant alive across restarts so the
+      // identifier stored in recent docs stays usable for 存回原檔 later.
+      await LocalFileSaver.persistPermission(file.identifier);
       if (!mounted) return;
       _openViewer(
         file.name,
@@ -444,6 +451,8 @@ class _HomeScreenState extends State<HomeScreen> {
                           doc.content,
                           source: doc.source,
                           sourceRef: doc.sourceRef,
+                          localPath: doc.localPath,
+                          localUri: doc.localUri,
                         ),
                         onRemove: _removeRecent,
                       ),

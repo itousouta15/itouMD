@@ -37,6 +37,23 @@ enum LocalSaveResult {
 class LocalFileSaver {
   static const _channel = MethodChannel('itou_md/local_file');
 
+  /// Asks Android to keep the read/write grant for [identifier] (a
+  /// `content://` Uri picked via `ACTION_OPEN_DOCUMENT`) across app
+  /// restarts, so the identifier stored in the recent-docs list stays
+  /// writable later. No-op (and harmless) on other platforms.
+  static Future<void> persistPermission(String? identifier) async {
+    if (kIsWeb || identifier == null || !Platform.isAndroid) return;
+    try {
+      await _channel.invokeMethod<void>('persistUriPermission', {
+        'uri': identifier,
+      });
+    } catch (_) {
+      // The picker may not have handed us a persistable grant (e.g. some
+      // third-party providers). The session grant still works while the
+      // process is alive; just don't crash on it.
+    }
+  }
+
   static Future<LocalSaveResult> writeBack({
     String? path,
     String? identifier,

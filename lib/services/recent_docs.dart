@@ -11,12 +11,22 @@ class RecentDoc {
   final String? sourceRef;
   final DateTime openedAt;
 
+  /// Where the underlying device file lives, when this doc was opened from a
+  /// local file — the sandbox copy path and the platform's original-file
+  /// reference (Android `content://` Uri, or null on desktop where [localPath]
+  /// IS the original). Persisted so reopening from "最近開啟" keeps the
+  /// "存回原檔" capability instead of degrading to a plain copy.
+  final String? localPath;
+  final String? localUri;
+
   const RecentDoc({
     required this.title,
     required this.content,
     required this.source,
     required this.openedAt,
     this.sourceRef,
+    this.localPath,
+    this.localUri,
   });
 
   Map<String, dynamic> toJson() => {
@@ -24,6 +34,8 @@ class RecentDoc {
     'content': content,
     'source': source.name,
     'sourceRef': sourceRef,
+    'localPath': localPath,
+    'localUri': localUri,
     'openedAt': openedAt.toIso8601String(),
   };
 
@@ -35,6 +47,8 @@ class RecentDoc {
       orElse: () => RecentDocSource.paste,
     ),
     sourceRef: json['sourceRef'] as String?,
+    localPath: json['localPath'] as String?,
+    localUri: json['localUri'] as String?,
     openedAt: DateTime.parse(json['openedAt'] as String),
   );
 }
