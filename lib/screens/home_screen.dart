@@ -127,6 +127,11 @@ class _HomeScreenState extends State<HomeScreen> {
         ),
       ),
     );
+    // The viewer persists edits (and syncs) into the recent-docs store while
+    // this screen is underneath; reload so the in-memory list doesn't stay
+    // stale — otherwise tapping the same entry again re-opens the OLD
+    // content and overwrites the edited copy.
+    if (mounted) await _loadRecents();
   }
 
   Future<void> _removeRecent(RecentDoc doc) async {
