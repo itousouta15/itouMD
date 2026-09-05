@@ -10,6 +10,7 @@ import io.flutter.plugin.common.MethodChannel
 
 class MainActivity : FlutterActivity() {
     private val channelName = "itou_md/install"
+    private val localFileChannelName = "itou_md/local_file"
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
@@ -35,6 +36,42 @@ class MainActivity : FlutterActivity() {
                     // to pick the matching asset.
                     "supportedAbis" ->
                         result.success(Build.SUPPORTED_ABIS.toList())
+                    else -> result.notImplemented()
+                }
+            }
+        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, localFileChannelName)
+            .setMethodCallHandler { call, result ->
+                when (call.method) {
+                    // Writes bytes back to a file picked via ACTION_OPEN_DOCUMENT.
+                    // The picker's Uri grant covers read+write for this session, so
+                    // opening an output stream on the original content:// Uri lets
+                    // us save edits in place instead of forcing a save-as copy.
+                    "writeToUri" -> {
+                        val uri = call.argument<String>("uri")
+                        val bytes = call.argument<ByteArray>("bytes")
+                        if (uri == null || bytes == null) {
+                            result.error("bad_args", "uri or bytes missing", null)
+                            return@setMethodCallHandler
+                        }
+                        try {
+                            val stream = contentResolver.openOutputStream(
+                                Uri.parse(uri),
+                                "wt"
+                            )
+                            if (stream == null) {
+                                result.error(
+                                    "no_stream",
+                                    "cannot open output stream for uri",
+                                    null
+                                )
+                                return@setMethodCallHandler
+                            }
+                            stream.use { it.write(bytes) }
+                            result.success(null)
+                        } catch (e: Exception) {
+                            result.error("write_failed", e.message, null)
+                        }
+                    }
                     else -> result.notImplemented()
                 }
             }

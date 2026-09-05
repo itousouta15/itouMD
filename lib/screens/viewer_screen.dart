@@ -19,6 +19,7 @@ import '../services/github_api.dart';
 import '../services/github_link_rewriter.dart';
 import '../services/hackmd_account.dart';
 import '../services/hackmd_api.dart';
+import '../services/local_file_saver.dart';
 import '../services/markdown_editor_actions.dart';
 import '../services/markdown_renderer.dart';
 import '../services/note_cache.dart';
@@ -59,6 +60,13 @@ class ViewerScreen extends StatefulWidget {
   /// GitHub URLs. `null` for anything not opened via [GithubApi].
   final GithubLinkContext? githubLinkContext;
 
+  /// The local file this doc was opened from, if any — the sandbox copy path
+  /// (`file_picker`'s `path`) and/or the platform's original-file reference
+  /// (`identifier`, an Android `content://` Uri or iOS NSURL). Used to offer
+  /// "存回原檔" in place of a forced save-as.
+  final String? localPath;
+  final String? localUri;
+
   const ViewerScreen({
     super.key,
     required this.title,
@@ -66,6 +74,8 @@ class ViewerScreen extends StatefulWidget {
     this.source = RecentDocSource.paste,
     this.sourceRef,
     this.githubLinkContext,
+    this.localPath,
+    this.localUri,
   });
 
   @override
@@ -120,6 +130,11 @@ class _ViewerScreenState extends State<ViewerScreen> {
     if (widget.source != RecentDocSource.url || ref == null) return false;
     return GithubApi.parseUrl(ref) != null;
   }
+
+  /// Whether this doc was opened from a file on the device (vs. pasted or
+  /// fetched from a URL) — the only source a "存回原檔" action makes sense
+  /// for.
+  bool get _isLocalFile => widget.localPath != null || widget.localUri != null;
 
   @override
   void initState() {
@@ -387,6 +402,100 @@ class _ViewerScreenState extends State<ViewerScreen> {
     }
   }
 
+  /// Writes the edited content back to the file it was opened from, instead
+  /// of forcing a save-as copy. Overwriting the original is destructive, so
+  /// confirm first. Platforms that can't write back (iOS) fall back to a
+  /// snackbar pointing at 另存新檔 rather than silently writing to the
+  /// sandbox copy.
+  Future<void> _saveInPlace(BuildContext context) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('存回原檔'),
+        content: const Text('直接覆寫原本的檔案？'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(false),
+            child: const Text('取消'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(dialogContext).pop(true),
+            child: const Text('覆寫'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !context.mounted) return;
+
+    final text = _editing ? _editController.text : _content;
+    final result = await LocalFileSaver.writeBack(
+      path: widget.localPath,
+      identifier: widget.localUri,
+      text: text,
+    );
+    if (!context.mounted) return;
+    switch (result) {
+      case LocalSaveResult.saved:
+        await RecentDocs.add(
+          RecentDoc(
+            title: widget.title,
+            content: text,
+            source: widget.source,
+            sourceRef: widget.sourceRef,
+            openedAt: DateTime.now(),
+          ),
+        );
+        if (!context.mounted) return;
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('已存回原檔 (｡•ᴗ•｡)')));
+      case LocalSaveResult.failed:
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('存回原檔失敗，請改用「另存新檔」(´;ω;`)')),
+        );
+      case LocalSaveResult.unsupported:
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('這個裝置無法直接寫回原檔，請用「另存新檔」儲存 (´;ω;`)'),
+          ),
+        );
+    }
+  }
+
+  /// Asks for the commit message to attach to a GitHub write-back, prefilled
+  /// with the app's default. Returns `null` if the user cancels.
+  Future<String?> _askCommitMessage(BuildContext context) async {
+    final controller = TextEditingController(text: '編輯自 itouMD');
+    final message = await showDialog<String>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Commit message'),
+        content: TextField(
+          controller: controller,
+          autofocus: true,
+          maxLines: 3,
+          decoration: const InputDecoration(
+            hintText: '寫一段 commit message…',
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(),
+            child: const Text('取消'),
+          ),
+          FilledButton(
+            onPressed: () =>
+                Navigator.of(dialogContext).pop(controller.text.trim()),
+            child: const Text('寫回 GitHub'),
+          ),
+        ],
+      ),
+    );
+    controller.dispose();
+    if (message == null || message.isEmpty) return null;
+    return message;
+  }
+
   Future<void> _syncToHackmd(BuildContext context) async {
     final ref = widget.sourceRef;
     final uri = ref == null ? null : Uri.tryParse(ref);
@@ -600,6 +709,10 @@ class _ViewerScreenState extends State<ViewerScreen> {
       return;
     }
 
+    final message = await _askCommitMessage(context);
+    if (!context.mounted) return;
+    if (message == null) return;
+
     setState(() => _syncingToGithub = true);
     try {
       final remote = await GithubApi.getFile(token, target);
@@ -637,6 +750,7 @@ class _ViewerScreenState extends State<ViewerScreen> {
         text,
         sha: remote.sha,
         branch: target.branch.isEmpty ? null : target.branch,
+        message: message,
       );
       _baselineContent = text;
       NoteCache.saveNote(widget.sourceRef!, widget.title, text);
@@ -940,6 +1054,12 @@ class _ViewerScreenState extends State<ViewerScreen> {
             icon: const Icon(Icons.save_alt_outlined),
             onPressed: () => _saveAs(context),
           ),
+          if (_isLocalFile)
+            IconButton(
+              tooltip: '存回原檔',
+              icon: const Icon(Icons.save_outlined),
+              onPressed: () => _saveInPlace(context),
+            ),
           if (_isHackmdDoc) ...[
             IconButton(
               tooltip: '同步到 HackMD',
