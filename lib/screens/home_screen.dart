@@ -95,6 +95,8 @@ class _HomeScreenState extends State<HomeScreen> {
     RecentDocSource source = RecentDocSource.paste,
     String? sourceRef,
     GithubLinkContext? githubLinkContext,
+    String? localPath,
+    String? localUri,
   }) async {
     if (content.trim().isEmpty) {
       setState(() => _error = '內容是空的喔 (´;ω;`)');
@@ -120,6 +122,8 @@ class _HomeScreenState extends State<HomeScreen> {
           source: source,
           sourceRef: sourceRef,
           githubLinkContext: githubLinkContext,
+          localPath: localPath,
+          localUri: localUri,
         ),
       ),
     );
@@ -155,7 +159,13 @@ class _HomeScreenState extends State<HomeScreen> {
       }
       final text = utf8.decode(bytes, allowMalformed: true);
       if (!mounted) return;
-      _openViewer(file.name, text, source: RecentDocSource.file);
+      _openViewer(
+        file.name,
+        text,
+        source: RecentDocSource.file,
+        localPath: file.path,
+        localUri: file.identifier,
+      );
     } catch (_) {
       setState(() => _error = '選擇檔案時出了點問題 (´;ω;`)');
     } finally {
