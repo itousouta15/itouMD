@@ -375,9 +375,9 @@ class _ViewerScreenState extends State<ViewerScreen> {
     switch (result) {
       case LocalSaveResult.saved:
         _lastSavedContent = edited;
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(const SnackBar(content: Text('已存回原檔 (｡•ᴗ•｡)')));
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('已存回原檔：${widget.title} (｡•ᴗ•｡)')),
+        );
       case LocalSaveResult.failed:
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('存回原檔失敗，請按「存回原檔」重試或改用「另存新檔」(´;ω;`)')),
@@ -478,9 +478,9 @@ class _ViewerScreenState extends State<ViewerScreen> {
           ),
         );
         if (!context.mounted) return;
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(const SnackBar(content: Text('已存回原檔 (｡•ᴗ•｡)')));
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('已存回原檔：${widget.title} (｡•ᴗ•｡)')),
+        );
       case LocalSaveResult.failed:
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('存回原檔失敗，請改用「另存新檔」(´;ω;`)')),
