@@ -115,6 +115,13 @@ class _ViewerScreenState extends State<ViewerScreen> {
   // app already auto-loaded the newer copy.
   late String _baselineContent = widget.content;
 
+  /// The most recent text known to be saved back to the original local file
+  /// (starts as the content the file had when opened). "完成編輯" only
+  /// writes back when the edited text differs from this, so re-saving the
+  /// same text is skipped but a change back to the originally-opened content
+  /// is still written.
+  late String _lastSavedContent = widget.content;
+
   /// Whether this doc was fetched from a `hackmd.io` URL — the only source
   /// a "sync back to the cloud" action makes sense for.
   bool get _isHackmdDoc {
@@ -333,10 +340,11 @@ class _ViewerScreenState extends State<ViewerScreen> {
 
   /// Leaves edit mode, re-renders the preview from the edited text, and
   /// persists the change to the recent-docs entry (matched by title+source)
-  /// so reopening the doc later — from "最近開啟" — shows the edit. Writing
-  /// the edit back to an actual file on disk is a separate, explicit
-  /// "另存新檔" action, since silently overwriting the original is riskier
-  /// and Android's scoped storage often can't do it reliably anyway.
+  /// so reopening the doc later — from "最近開啟" — shows the edit. When the
+  /// doc was opened from a local file (Android/desktop), the edited text is
+  /// also written straight back to the original file, so re-picking the same
+  /// file shows the update. iOS can't write back (system limitation) and
+  /// keeps requiring 另存新檔.
   Future<void> _applyEdit() async {
     final edited = _editController.text;
     _scrollToLine = _lineOfOffset(edited, _editController.selection.baseOffset);
@@ -354,6 +362,29 @@ class _ViewerScreenState extends State<ViewerScreen> {
         openedAt: DateTime.now(),
       ),
     );
+    // Auto-save back to the original file on "完成編輯". Skipped when the
+    // text hasn't changed since the last save, and on platforms that can't
+    // write back (iOS) — the file there is only updated via 另存新檔.
+    if (!_isLocalFile || edited == _lastSavedContent) return;
+    final result = await LocalFileSaver.writeBack(
+      path: widget.localPath,
+      identifier: widget.localUri,
+      text: edited,
+    );
+    if (!mounted) return;
+    switch (result) {
+      case LocalSaveResult.saved:
+        _lastSavedContent = edited;
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('已存回原檔 (｡•ᴗ•｡)')));
+      case LocalSaveResult.failed:
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('存回原檔失敗，請按「存回原檔」重試或改用「另存新檔」(´;ω;`)')),
+        );
+      case LocalSaveResult.unsupported:
+        break;
+    }
   }
 
   /// Enters edit mode with the cursor placed at roughly the line the
@@ -436,6 +467,7 @@ class _ViewerScreenState extends State<ViewerScreen> {
     if (!context.mounted) return;
     switch (result) {
       case LocalSaveResult.saved:
+        _lastSavedContent = text;
         await RecentDocs.add(
           RecentDoc(
             title: widget.title,
