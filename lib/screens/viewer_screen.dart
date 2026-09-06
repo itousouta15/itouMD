@@ -359,6 +359,8 @@ class _ViewerScreenState extends State<ViewerScreen> {
         content: edited,
         source: widget.source,
         sourceRef: widget.sourceRef,
+        localPath: widget.localPath,
+        localUri: widget.localUri,
         openedAt: DateTime.now(),
       ),
     );
@@ -474,6 +476,8 @@ class _ViewerScreenState extends State<ViewerScreen> {
             content: text,
             source: widget.source,
             sourceRef: widget.sourceRef,
+            localPath: widget.localPath,
+            localUri: widget.localUri,
             openedAt: DateTime.now(),
           ),
         );
