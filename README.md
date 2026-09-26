@@ -10,15 +10,9 @@
 
 一款用於行動裝置的現代化 Markdown 檢視器與編輯器，深度整合 HackMD。
 
-## 截圖
+## 介面導覽
 
-| 精靈式介紹 | 首頁 | 檢視器 |
-| --- | --- | --- |
-| ![精靈式介紹](site/public/screenshots/01-onboarding.png) | ![首頁](site/public/screenshots/02-home.png) | ![檢視器](site/public/screenshots/03-viewer.png) |
-
-| 編輯模式 | 同步雲端 | 設定 |
-| --- | --- | --- |
-| ![編輯模式](site/public/screenshots/04-editor.png) | ![HackMD](site/public/screenshots/05-notes.png) | ![設定](site/public/screenshots/06-settings.png) |
+底部提供「首頁／雲端／設定」三個分頁：首頁快速新建或開啟文件、接續最近開啟的內容；雲端分頁可搜尋 HackMD 筆記或開啟 GitHub Repo；設定保留深淺主題、自訂顏色、閱讀字體與字級。進入文件後切換成全螢幕閱讀／編輯介面。
 
 ## 功能亮點
 
@@ -58,7 +52,7 @@
 
 - **OAuth Device Flow 登入**：在 GitHub 上輸入裝置代碼即可完成授權，不用自己產生 Token（手動 PAT 保留為進階選項）。
 - **寫回 GitHub**：從 GitHub 網址（blob 頁面或 repo 首頁）開啟的文件，編輯完可直接寫回 repo；寫回前可自訂 commit message；以檔案 SHA 偵測衝突並提供三方合併，同步後可復原。
-- **開啟 GitHub Repo**：首頁輸入 `owner/repo`（或貼完整網址）直接開啟該 repo 的 README；登入後也支援私有 repo。
+- **開啟 GitHub Repo**：「雲端 → GitHub」輸入 `owner/repo`（或貼完整網址）直接開啟該 repo 的 README；登入後也支援私有 repo。
 
 ### 其他
 
@@ -85,10 +79,12 @@
 
 ```
 lib/
-├── main.dart                          應用入口：Sentry、主題（跟隨系統／自訂主色背景）、介面字級、首頁／精靈介紹
+├── main.dart                          應用入口：Sentry、主題、介面字級、主分頁／精靈介紹
 ├── theme.dart                         自訂應用主題與顏色樣式（主色／背景衍生邏輯）
 ├── screens/
-│   ├── home_screen.dart               首頁：新建、貼上、選檔、網址抓取、GitHub Repo 開啟、最近開啟、啟動靜默檢查更新
+│   ├── app_shell.dart                 首頁／雲端／設定底部分頁
+│   ├── home_screen.dart               首頁：新建、貼上、選檔、網址抓取、最近開啟、靜默檢查更新
+│   ├── cloud_screen.dart              雲端：HackMD 筆記與 GitHub Repo 入口
 │   ├── onboarding_screen.dart         首次啟動的精靈式介紹（5 頁：3 頁介紹＋帳號登入引導）
 │   ├── viewer_screen.dart             檢視／編輯：渲染、行號編輯器、工具列、同步、衝突合併、復原、離線、AI 助理
 │   ├── conflict_screen.dart           衝突合併畫面：差異檢視、逐項選擇、合併預覽
@@ -100,6 +96,7 @@ lib/
 ├── services/
 │   ├── markdown_renderer.dart         Markdown → HTML 轉換管線（isolate 執行）
 │   ├── markdown_source.dart           遠端 Markdown 擷取與 URL 正規化
+│   ├── github_document_opener.dart    共用 GitHub 文件開啟邏輯
 │   ├── markdown_editor_actions.dart   編輯器工具列／清單自動延續的純邏輯
 │   ├── markdown_diff.dart             Myers diff 與三方合併（純 Dart、可單測）
 │   ├── hackmd_syntax.dart             HackMD 容器語法、`[TOC]` 展開
@@ -250,9 +247,9 @@ flutter build ios --release
 
 ### 基本操作
 
-2. 首頁點「建立新文件」輸入標題即可開始寫；也可直接「貼上文字」、選擇本機檔案，或貼入網址從 GitHub／Gist／HackMD 擷取內容；還可以在「開啟 GitHub Repo」輸入 `owner/repo`（或貼完整網址）直接載入該 repo 的 README。
+2. 首頁點「建立新文件」輸入標題即可開始寫；下方「開啟文件」可貼上文字、選擇本機檔案，或貼入 GitHub／Gist／HackMD 網址。到「雲端 → GitHub」輸入 `owner/repo`（或貼完整網址）可直接載入該 repo 的 README。
 3. 進入檢視頁面後，點右上角編輯圖示切換到編輯模式，左側會出現行號欄，畫面下方會出現格式工具列。
-4. 編輯完成後點「完成編輯」套用並重新渲染預覽，預覽會自動捲回剛才編輯的那一行；點「另存新檔」可存成 `.md` 檔案。
+4. 編輯完成後點「完成編輯」套用並重新渲染預覽，預覽會自動捲回剛才編輯的那一行；右上角「更多操作 → 另存新檔」可存成 `.md` 檔案。
 5. 點程式碼區塊右上角圖示可複製整段程式碼；點文件中的圖片可全螢幕放大。
 
 ### HackMD 同步與衝突合併
@@ -265,11 +262,11 @@ flutter build ios --release
 
 ### 瀏覽 HackMD 筆記清單
 
-11. 首頁點「瀏覽我的 HackMD 筆記」，分類列表（個人筆記／各團隊）預設收起，點標題展開；下拉重新整理；離線時會顯示上次的快取並標示「離線資料」。
+11. 到「雲端 → HackMD」搜尋或瀏覽筆記，分類列表（個人筆記／各團隊）預設收起，點標題展開；下拉重新整理；離線時會顯示上次的快取並標示「離線資料」。
 
 ### AI 助理
 
-12. 編輯模式點 AI 按鈕（AppBar 或工具列上的醒目標示），或選取文字後從選單選「AI 助理」。
+12. 編輯模式點工具列上的 AI 按鈕、右上角「更多操作 → AI 助理」，或選取文字後從選單選「AI 助理」。
 13. 「快捷指令」分頁提供 13 個一鍵指令（潤飾、翻譯、改寫、摘要等）；結果會先顯示增刪差異（diff）再套用，套用會替換選取文字（未選取時為整篇文件）。
 14. 「自由交流」分頁可與 AI 多輪串流對話；每一輪都知道整篇文件（與你的選取），例如「把選取的部分改得更口語」直接有效。任何回覆都可點「套用到編輯器」。
 15. AI 連線設定在「設定 → AI 助理」——內建免費額度（每日配額有限）或自訂 OpenAI 相容端點＋API Key，可在此測試連線。
@@ -281,7 +278,7 @@ flutter build ios --release
 
 ### 閱讀偏好與外觀
 
-18. 檢視頁面點「顯示設定」可即時調整字體（含**匯入自訂字型**，支援 `.ttf`／`.otf`）、字級、文字顏色（含自訂調色盤）。
+18. 檢視頁面點「更多操作 → 閱讀設定」可即時調整字體（含**匯入自訂字型**，支援 `.ttf`／`.otf`）、字級、文字顏色（含自訂調色盤）。
 19. 「設定 → 外觀」可調整主題（**跟隨系統**／淺色／深色）與**主題顏色**——淺色、深色主題可分別設定主色（按鈕、連結等強調色）與背景色（「自動」會跟隨主色衍生同色系底色，或自訂；面板色系自動衍生、文字對比隨背景亮度調整）；介面字級（標準／大／特大）也在這裡。資料管理（清除最近開啟紀錄與離線快取）同在設定頁。
 
 ### App 內更新

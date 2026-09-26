@@ -15,7 +15,16 @@ import 'viewer_screen.dart';
 /// the viewer with its canonical `hackmd.io` URL as the source ref, so the
 /// "sync back to the cloud" action keeps working without pasting a URL.
 class HackmdNotesScreen extends StatefulWidget {
-  const HackmdNotesScreen({super.key});
+  final bool embedded;
+  final VoidCallback? onRecentsChanged;
+  final int refreshToken;
+
+  const HackmdNotesScreen({
+    super.key,
+    this.embedded = false,
+    this.onRecentsChanged,
+    this.refreshToken = 0,
+  });
 
   @override
   State<HackmdNotesScreen> createState() => _HackmdNotesScreenState();
@@ -29,11 +38,28 @@ class _HackmdNotesScreenState extends State<HackmdNotesScreen> {
   bool _offline = false;
   String? _error;
   String? _openingNoteId;
+  final _searchController = TextEditingController();
+  String _query = '';
 
   @override
   void initState() {
     super.initState();
     _load();
+    _searchController.addListener(() {
+      setState(() => _query = _searchController.text.trim().toLowerCase());
+    });
+  }
+
+  @override
+  void didUpdateWidget(covariant HackmdNotesScreen oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.refreshToken != oldWidget.refreshToken) _load();
+  }
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
   }
 
   Future<void> _load() async {
@@ -42,7 +68,18 @@ class _HackmdNotesScreenState extends State<HackmdNotesScreen> {
       _error = null;
       _offline = false;
     });
-    final token = await HackmdAccount.getToken();
+    String? token;
+    try {
+      token = await HackmdAccount.getToken();
+    } catch (_) {
+      if (mounted) {
+        setState(() {
+          _loading = false;
+          _error = '無法讀取 HackMD 帳號，請重試';
+        });
+      }
+      return;
+    }
     if (!mounted) return;
     if (token == null || token.isEmpty) {
       setState(() {
@@ -154,6 +191,17 @@ class _HackmdNotesScreenState extends State<HackmdNotesScreen> {
       if (!mounted) return;
       final url = _noteUrl(note, team);
       final title = _noteTitle(full, full.content);
+      await RecentDocs.add(
+        RecentDoc(
+          title: title,
+          content: full.content,
+          source: RecentDocSource.url,
+          sourceRef: url,
+          openedAt: DateTime.now(),
+        ),
+      );
+      widget.onRecentsChanged?.call();
+      if (!mounted) return;
       await Navigator.of(context).push(
         MaterialPageRoute(
           builder: (_) => ViewerScreen(
@@ -164,6 +212,7 @@ class _HackmdNotesScreenState extends State<HackmdNotesScreen> {
           ),
         ),
       );
+      widget.onRecentsChanged?.call();
     } on HackmdApiException catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(
@@ -182,6 +231,7 @@ class _HackmdNotesScreenState extends State<HackmdNotesScreen> {
   @override
   Widget build(BuildContext context) {
     final c = ItouColorsExt.of(context);
+    if (widget.embedded) return _buildBody(c);
     return Scaffold(
       backgroundColor: c.bg,
       appBar: AppBar(title: const Text('我的 HackMD 筆記')),
@@ -194,12 +244,24 @@ class _HackmdNotesScreenState extends State<HackmdNotesScreen> {
       return const Center(child: LoaderRing());
     }
     if (_error != null) {
-      return _ErrorPanel(error: _error!, onRetry: _load, c: c);
+      return _ErrorPanel(
+        error: _error!,
+        onRetry: _load,
+        onConnect: _connectAccount,
+        c: c,
+      );
     }
-    final hasPersonal = _personal.isNotEmpty;
-    final teamSectionTitles = _teams.where((t) => t.path.isNotEmpty);
+    bool matches(HackmdNote n) =>
+        (n.title ?? n.permalink ?? n.id).toLowerCase().contains(_query);
+    final personal = _personal.where(matches).toList();
+    final hasPersonal = personal.isNotEmpty;
+    final teamSectionTitles = _teams.where(
+      (t) =>
+          t.path.isNotEmpty &&
+          (_teamNotes[t.path] ?? const <HackmdNote>[]).any(matches),
+    );
     final hasTeams = teamSectionTitles.isNotEmpty;
-    if (!hasPersonal && !hasTeams) {
+    if (_personal.isEmpty && _teams.isEmpty) {
       return Center(
         child: Padding(
           padding: const EdgeInsets.all(24),
@@ -218,7 +280,8 @@ class _HackmdNotesScreenState extends State<HackmdNotesScreen> {
         _Section(
           title: '個人筆記',
           icon: Icons.person_outline,
-          children: _personal
+          initiallyExpanded: _query.isNotEmpty,
+          children: personal
               .map(
                 (n) => _NoteTile(
                   note: n,
@@ -233,12 +296,15 @@ class _HackmdNotesScreenState extends State<HackmdNotesScreen> {
       );
     }
     for (final team in teamSectionTitles) {
-      final notes = _teamNotes[team.path] ?? const <HackmdNote>[];
+      final notes = (_teamNotes[team.path] ?? const <HackmdNote>[])
+          .where(matches)
+          .toList();
       if (notes.isEmpty) continue;
       sections.add(
         _Section(
           title: '@${team.urlSlug}',
           icon: Icons.groups_outlined,
+          initiallyExpanded: _query.isNotEmpty,
           children: notes
               .map(
                 (n) => _NoteTile(
@@ -261,6 +327,14 @@ class _HackmdNotesScreenState extends State<HackmdNotesScreen> {
         physics: const AlwaysScrollableScrollPhysics(),
         padding: const EdgeInsets.fromLTRB(16, 12, 16, 32),
         children: [
+          TextField(
+            controller: _searchController,
+            decoration: const InputDecoration(
+              hintText: '搜尋 HackMD 筆記',
+              prefixIcon: Icon(Icons.search_rounded),
+            ),
+          ),
+          const SizedBox(height: 18),
           if (_offline)
             Container(
               margin: const EdgeInsets.only(bottom: 12),
@@ -290,9 +364,25 @@ class _HackmdNotesScreenState extends State<HackmdNotesScreen> {
             section,
             const SizedBox(height: 20),
           ],
+          if (!hasPersonal && !hasTeams)
+            Padding(
+              padding: const EdgeInsets.all(24),
+              child: Text(
+                '找不到符合的筆記',
+                textAlign: TextAlign.center,
+                style: TextStyle(color: c.dim),
+              ),
+            ),
         ],
       ),
     );
+  }
+
+  Future<void> _connectAccount() async {
+    await Navigator.of(context).push(
+      MaterialPageRoute<void>(builder: (_) => const HackmdAccountScreen()),
+    );
+    if (mounted) await _load();
   }
 }
 
@@ -300,11 +390,13 @@ class _Section extends StatefulWidget {
   final String title;
   final IconData icon;
   final List<Widget> children;
+  final bool initiallyExpanded;
 
   const _Section({
     required this.title,
     required this.icon,
     required this.children,
+    this.initiallyExpanded = false,
   });
 
   @override
@@ -312,9 +404,15 @@ class _Section extends StatefulWidget {
 }
 
 class _SectionState extends State<_Section> {
-  // Collapsed by default — long lists stay compact; tap a section header to
-  // expand just the one you need.
-  bool _expanded = false;
+  late bool _expanded = widget.initiallyExpanded;
+
+  @override
+  void didUpdateWidget(covariant _Section oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.initiallyExpanded != oldWidget.initiallyExpanded) {
+      _expanded = widget.initiallyExpanded;
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -335,6 +433,7 @@ class _SectionState extends State<_Section> {
                 border: Border.all(
                   color: _expanded ? c.blue.withValues(alpha: 0.45) : c.border,
                 ),
+                borderRadius: BorderRadius.zero,
               ),
               child: Row(
                 children: [
@@ -360,7 +459,7 @@ class _SectionState extends State<_Section> {
                     decoration: BoxDecoration(
                       color: c.inset,
                       border: Border.all(color: c.border),
-                      borderRadius: BorderRadius.circular(4),
+                      borderRadius: BorderRadius.zero,
                     ),
                     child: Text(
                       '${widget.children.length}',
@@ -388,6 +487,7 @@ class _SectionState extends State<_Section> {
                   decoration: BoxDecoration(
                     color: c.panel,
                     border: Border.all(color: c.border),
+                    borderRadius: BorderRadius.zero,
                   ),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -437,7 +537,7 @@ class _NoteTile extends StatelessWidget {
               decoration: BoxDecoration(
                 color: c.inset,
                 border: Border.all(color: c.border),
-                borderRadius: BorderRadius.circular(6),
+                borderRadius: BorderRadius.zero,
               ),
               child: Icon(Icons.description_outlined, size: 16, color: c.blue),
             ),
@@ -484,11 +584,13 @@ class _NoteTile extends StatelessWidget {
 class _ErrorPanel extends StatelessWidget {
   final String error;
   final VoidCallback onRetry;
+  final VoidCallback onConnect;
   final ItouColors c;
 
   const _ErrorPanel({
     required this.error,
     required this.onRetry,
+    required this.onConnect,
     required this.c,
   });
 
@@ -508,11 +610,7 @@ class _ErrorPanel extends StatelessWidget {
               ),
               const SizedBox(height: 16),
               ElevatedButton(
-                onPressed: () => Navigator.of(context).push(
-                  MaterialPageRoute(
-                    builder: (_) => const HackmdAccountScreen(),
-                  ),
-                ),
+                onPressed: onConnect,
                 child: const Text('設定 HackMD 帳號'),
               ),
             ],

@@ -3,46 +3,23 @@ import 'dart:convert';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:package_info_plus/package_info_plus.dart';
-import 'package:url_launcher/url_launcher.dart';
 
-import '../services/github_account.dart';
-import '../services/github_api.dart';
 import '../services/github_link_rewriter.dart';
 import '../services/hackmd_account.dart';
 import '../services/hackmd_api.dart';
 import '../services/local_file_saver.dart';
 import '../services/markdown_source.dart';
 import '../services/recent_docs.dart';
-import '../services/theme_prefs.dart';
-import '../services/ui_prefs.dart';
 import '../services/update_checker.dart';
 import '../theme.dart';
 import '../widgets/loader_ring.dart';
 import '../widgets/update_dialog.dart';
-import 'github_account_screen.dart';
-import 'github_repo_picker_screen.dart';
-import 'hackmd_account_screen.dart';
-import 'hackmd_notes_screen.dart';
-import 'settings_screen.dart';
 import 'viewer_screen.dart';
 
 class HomeScreen extends StatefulWidget {
-  final ThemeMode themeMode;
-  final ValueChanged<ThemeMode> onThemeModeChanged;
-  final ThemeCustomization customization;
-  final ValueChanged<ThemeCustomization> onCustomizationChanged;
-  final UiScale uiScale;
-  final ValueChanged<UiScale> onUiScaleChanged;
+  final int reloadRecentsToken;
 
-  const HomeScreen({
-    super.key,
-    required this.themeMode,
-    required this.onThemeModeChanged,
-    required this.customization,
-    required this.onCustomizationChanged,
-    required this.uiScale,
-    required this.onUiScaleChanged,
-  });
+  const HomeScreen({super.key, this.reloadRecentsToken = 0});
 
   @override
   State<HomeScreen> createState() => _HomeScreenState();
@@ -51,7 +28,6 @@ class HomeScreen extends StatefulWidget {
 class _HomeScreenState extends State<HomeScreen> {
   final _pasteController = TextEditingController();
   final _urlController = TextEditingController();
-  final _githubRepoController = TextEditingController();
   bool _busy = false;
   String? _error;
   List<RecentDoc> _recents = [];
@@ -61,6 +37,14 @@ class _HomeScreenState extends State<HomeScreen> {
     super.initState();
     _loadRecents();
     _checkUpdateSilently();
+  }
+
+  @override
+  void didUpdateWidget(covariant HomeScreen oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.reloadRecentsToken != oldWidget.reloadRecentsToken) {
+      _loadRecents();
+    }
   }
 
   Future<void> _loadRecents() async {
@@ -86,7 +70,6 @@ class _HomeScreenState extends State<HomeScreen> {
   void dispose() {
     _pasteController.dispose();
     _urlController.dispose();
-    _githubRepoController.dispose();
     super.dispose();
   }
 
@@ -183,113 +166,6 @@ class _HomeScreenState extends State<HomeScreen> {
     } finally {
       if (mounted) setState(() => _busy = false);
     }
-  }
-
-  Future<void> _openHackmdNotes() async {
-    final token = await HackmdAccount.getToken();
-    if (!mounted) return;
-    if (token == null || token.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: const Text('還沒連結 HackMD 帳號'),
-          action: SnackBarAction(
-            label: '設定',
-            onPressed: () => Navigator.of(context).push(
-              MaterialPageRoute(builder: (_) => const HackmdAccountScreen()),
-            ),
-          ),
-        ),
-      );
-      return;
-    }
-    await Navigator.of(
-      context,
-    ).push(MaterialPageRoute(builder: (_) => const HackmdNotesScreen()));
-  }
-
-  /// Opens a GitHub repo's README straight into the viewer. Accepts
-  /// `owner/repo` or a full github.com URL; uses the linked GitHub account
-  /// (private repos included) when one is connected, public fetch otherwise.
-  Future<void> _openGithubRepo() async {
-    final input = _githubRepoController.text.trim();
-    if (input.isEmpty) {
-      setState(() => _error = '請先輸入 owner/repo（例如 itousouta15/itouMD）(´;ω;`)');
-      return;
-    }
-    setState(() {
-      _busy = true;
-      _error = null;
-    });
-    try {
-      final hasScheme = Uri.tryParse(input)?.hasScheme ?? false;
-      final url = hasScheme ? input : 'https://github.com/$input';
-      final uri = Uri.tryParse(url);
-      if (uri == null || uri.host != 'github.com') {
-        throw MarkdownFetchException('請輸入 owner/repo 或 github.com 網址 (´;ω;`)');
-      }
-      final ref = GithubApi.parseUrl(url);
-      if (ref == null) {
-        throw MarkdownFetchException('這個 GitHub 網址格式不支援 (´;ω;`)');
-      }
-
-      String content;
-      String title;
-      GithubLinkContext? linkContext;
-      final token = await GithubAccount.getToken();
-      if (ref.branch.isEmpty && ref.path == 'README.md') {
-        // A bare repo URL (no explicit file) — use the dedicated readme
-        // endpoint, which resolves the actual filename itself instead of
-        // guessing "README.md" and 404ing on repos using a different case
-        // (readme.md, Readme.md, ...). Works without a token too.
-        final file = await GithubApi.getReadme(ref, token: token);
-        content = file.content;
-        title = ref.displayName;
-        linkContext = GithubLinkContext.fromFile(ref.owner, ref.repo, file);
-      } else if (token != null && token.isNotEmpty) {
-        final file = await GithubApi.getFile(token, ref);
-        content = file.content;
-        title = ref.displayName;
-        linkContext = GithubLinkContext.fromFile(ref.owner, ref.repo, file);
-      } else {
-        content = await fetchMarkdownFromUrl(url);
-        title = extractDocTitle(content) ?? ref.displayName;
-      }
-      if (!mounted) return;
-      await _openViewer(
-        title,
-        content,
-        source: RecentDocSource.url,
-        sourceRef: url,
-        githubLinkContext: linkContext,
-      );
-    } on MarkdownFetchException catch (e) {
-      if (mounted) setState(() => _error = e.message);
-    } on GithubApiException catch (e) {
-      if (mounted) setState(() => _error = e.message);
-    } catch (_) {
-      if (mounted) setState(() => _error = '開啟失敗，再試一次看看 (´;ω;`)');
-    } finally {
-      if (mounted) setState(() => _busy = false);
-    }
-  }
-
-  /// Browses the linked account's repos instead of typing `owner/repo` by
-  /// hand. Prompts to connect an account first if none is linked yet.
-  Future<void> _pickGithubRepo() async {
-    final token = await GithubAccount.getToken();
-    if (!mounted) return;
-    if (token == null || token.isEmpty) {
-      await Navigator.of(
-        context,
-      ).push(MaterialPageRoute(builder: (_) => const GithubAccountScreen()));
-      return;
-    }
-    final picked = await Navigator.of(context).push<String>(
-      MaterialPageRoute(builder: (_) => GithubRepoPickerScreen(token: token)),
-    );
-    if (picked == null || !mounted) return;
-    _githubRepoController.text = picked;
-    _openGithubRepo();
   }
 
   Future<void> _fetchUrl() async {
@@ -396,54 +272,104 @@ class _HomeScreenState extends State<HomeScreen> {
   @override
   Widget build(BuildContext context) {
     final c = ItouColorsExt.of(context);
-    // The header logo picks a light/dark artwork from the *effective*
-    // brightness, which in "follow system" mode is the platform's.
     final isDark = Theme.of(context).brightness == Brightness.dark;
-
     return Scaffold(
       backgroundColor: c.bg,
       body: SafeArea(
         child: SingleChildScrollView(
-          padding: const EdgeInsets.only(bottom: 32),
+          padding: const EdgeInsets.only(bottom: 36),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              _Header(
-                c: c,
-                isDark: isDark,
-                onOpenSettings: () => Navigator.of(context).push(
-                  MaterialPageRoute(
-                    builder: (_) => SettingsScreen(
-                      themeMode: widget.themeMode,
-                      onThemeModeChanged: widget.onThemeModeChanged,
-                      customization: widget.customization,
-                      onCustomizationChanged: widget.onCustomizationChanged,
-                      uiScale: widget.uiScale,
-                      onUiScaleChanged: widget.onUiScaleChanged,
-                    ),
-                  ),
-                ),
-              ),
+              _Header(c: c, isDark: isDark),
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 20),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    if (_recents.isNotEmpty) ...[
-                      Row(
+                    Container(
+                      padding: const EdgeInsets.all(22),
+                      decoration: BoxDecoration(
+                        color: c.panel,
+                        border: Border.all(color: c.border),
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          const SectionLabel('最近開啟'),
-                          const Spacer(),
-                          GestureDetector(
-                            onTap: _clearRecents,
-                            child: Text(
-                              '清除紀錄',
-                              style: TextStyle(color: c.mute, fontSize: 11),
-                            ),
+                          Text(
+                            '隨時隨地編輯.md',
+                            style: Theme.of(context).textTheme.headlineSmall,
+                          ),
+                          const SizedBox(height: 8),
+                          Text(
+                            '開啟 Markdown、整理想法，或接著編輯上次的內容。',
+                            style: TextStyle(color: c.dim, height: 1.6),
+                          ),
+                          const SizedBox(height: 20),
+                          ElevatedButton.icon(
+                            onPressed: _busy ? null : _createNewDoc,
+                            icon: const Icon(Icons.add_rounded),
+                            label: const Text('建立新文件'),
                           ),
                         ],
                       ),
-                      const SizedBox(height: 8),
+                    ),
+                    if (_busy) ...[
+                      const SizedBox(height: 16),
+                      const Center(child: LoaderRing()),
+                    ],
+                    if (_error != null)
+                      Container(
+                        margin: const EdgeInsets.only(top: 16),
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          color: c.panel,
+                          border: Border.all(color: ItouColors.danger),
+                          borderRadius: BorderRadius.zero,
+                        ),
+                        child: Text(
+                          _error!,
+                          style: const TextStyle(color: ItouColors.danger),
+                        ),
+                      ),
+                    const SizedBox(height: 28),
+                    Row(
+                      children: [
+                        Text(
+                          '最近開啟',
+                          style: Theme.of(context).textTheme.titleMedium,
+                        ),
+                        const Spacer(),
+                        if (_recents.isNotEmpty)
+                          TextButton(
+                            onPressed: _clearRecents,
+                            child: const Text('清除紀錄'),
+                          ),
+                      ],
+                    ),
+                    const SizedBox(height: 10),
+                    if (_recents.isEmpty)
+                      Container(
+                        padding: const EdgeInsets.all(22),
+                        decoration: BoxDecoration(
+                          color: c.panel,
+                          border: Border.all(color: c.border),
+                          borderRadius: BorderRadius.zero,
+                        ),
+                        child: Row(
+                          children: [
+                            Icon(Icons.history_rounded, color: c.dim),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: Text(
+                                '開啟過的文件會出現在這裡',
+                                style: TextStyle(color: c.dim, fontSize: 13),
+                              ),
+                            ),
+                          ],
+                        ),
+                      )
+                    else
                       _RecentDocsPanel(
                         docs: _recents,
                         onOpen: (doc) => _openViewer(
@@ -456,222 +382,39 @@ class _HomeScreenState extends State<HomeScreen> {
                         ),
                         onRemove: _removeRecent,
                       ),
-                      const SizedBox(height: 24),
-                    ],
-
-                    if (_busy)
-                      const Padding(
-                        padding: EdgeInsets.only(bottom: 20),
-                        child: Row(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [LoaderRing()],
-                        ),
-                      ),
-
-                    if (_error != null)
-                      Container(
-                        margin: const EdgeInsets.only(bottom: 20),
-                        padding: const EdgeInsets.all(12),
-                        decoration: BoxDecoration(
-                          color: c.panel,
-                          border: Border.all(color: ItouColors.danger),
-                        ),
-                        child: Row(
-                          children: [
-                            const Icon(
-                              Icons.error_outline,
-                              color: ItouColors.danger,
-                              size: 16,
-                            ),
-                            const SizedBox(width: 8),
-                            Expanded(
-                              child: Text(
-                                _error!,
-                                style: const TextStyle(
-                                  color: ItouColors.danger,
-                                  fontSize: 13,
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-
-                    _StepCard(
-                      step: '00',
-                      title: '新建文件',
-                      accent: c.blue,
-                      child: ElevatedButton.icon(
-                        onPressed: _busy ? null : _createNewDoc,
-                        icon: const Icon(Icons.note_add_outlined, size: 18),
-                        label: const Text('建立新文件'),
-                      ),
+                    const SizedBox(height: 28),
+                    Text(
+                      '開啟文件',
+                      style: Theme.of(context).textTheme.titleMedium,
                     ),
-                    const SizedBox(height: 20),
-
-                    _StepCard(
-                      step: '01',
-                      title: '貼上文字',
-                      accent: c.blue,
+                    const SizedBox(height: 10),
+                    Container(
+                      decoration: BoxDecoration(
+                        color: c.panel,
+                        border: Border.all(color: c.border),
+                        borderRadius: BorderRadius.zero,
+                      ),
                       child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.stretch,
                         children: [
-                          TextField(
-                            controller: _pasteController,
-                            maxLines: 6,
-                            minLines: 4,
-                            style: TextStyle(color: c.text, fontSize: 13.5),
-                            decoration: const InputDecoration(
-                              hintText: '# 貼上你的 Markdown 原始碼...',
-                              border: InputBorder.none,
-                            ),
+                          _OpenAction(
+                            icon: Icons.content_paste_outlined,
+                            title: '貼上文字',
+                            subtitle: '從剪貼簿貼上 Markdown',
+                            onTap: () => _showInputSheet(isUrl: false),
                           ),
-                          const SizedBox(height: 12),
-                          ElevatedButton.icon(
-                            onPressed: () =>
-                                _openViewer('貼上的內容', _pasteController.text),
-                            icon: const Icon(
-                              Icons.auto_stories_outlined,
-                              size: 18,
-                            ),
-                            label: const Text('開始檢視'),
+                          Divider(height: 1, indent: 56, color: c.border),
+                          _OpenAction(
+                            icon: Icons.folder_open_outlined,
+                            title: '選擇本機檔案',
+                            subtitle: '開啟 .md、.mdx 或 .txt',
+                            onTap: _busy ? null : _pickFile,
                           ),
-                        ],
-                      ),
-                    ),
-                    const SizedBox(height: 20),
-
-                    _StepCard(
-                      step: '02',
-                      title: '選擇本機檔案',
-                      accent: c.blue,
-                      child: ElevatedButton.icon(
-                        onPressed: _busy ? null : _pickFile,
-                        icon: const Icon(Icons.folder_open_outlined, size: 18),
-                        label: const Text('選擇 .md 檔案'),
-                      ),
-                    ),
-                    const SizedBox(height: 20),
-
-                    _StepCard(
-                      step: '03',
-                      title: '貼上網址',
-                      accent: c.blue,
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.stretch,
-                        children: [
-                          TextField(
-                            controller: _urlController,
-                            keyboardType: TextInputType.url,
-                            style: TextStyle(color: c.text, fontSize: 13.5),
-                            decoration: const InputDecoration(
-                              hintText:
-                                  'https://github.com/.../blob/main/README.md',
-                              border: InputBorder.none,
-                            ),
-                          ),
-                          const SizedBox(height: 12),
-                          ElevatedButton.icon(
-                            onPressed: _busy ? null : _fetchUrl,
-                            icon: const Icon(
-                              Icons.cloud_download_outlined,
-                              size: 18,
-                            ),
-                            label: const Text('從網址抓取'),
-                          ),
-                        ],
-                      ),
-                    ),
-                    const SizedBox(height: 20),
-
-                    _StepCard(
-                      step: '04',
-                      title: '瀏覽我的 HackMD 筆記',
-                      accent: c.blue,
-                      child: ElevatedButton.icon(
-                        onPressed: _openHackmdNotes,
-                        icon: const Icon(Icons.cloud_queue_outlined, size: 18),
-                        label: const Text('開啟筆記列表'),
-                      ),
-                    ),
-                    const SizedBox(height: 20),
-
-                    _StepCard(
-                      step: '05',
-                      title: '開啟 GitHub Repo',
-                      accent: c.blue,
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.stretch,
-                        children: [
-                          TextField(
-                            controller: _githubRepoController,
-                            keyboardType: TextInputType.url,
-                            style: TextStyle(color: c.text, fontSize: 13.5),
-                            decoration: InputDecoration(
-                              hintText: 'itousouta15/itouMD 或貼完整網址',
-                              border: InputBorder.none,
-                              suffixIcon: IconButton(
-                                tooltip: '瀏覽我的 Repo',
-                                icon: const Icon(
-                                  Icons.list_alt_outlined,
-                                  size: 20,
-                                ),
-                                onPressed: _busy ? null : _pickGithubRepo,
-                              ),
-                            ),
-                          ),
-                          const SizedBox(height: 12),
-                          ElevatedButton.icon(
-                            onPressed: _busy ? null : _openGithubRepo,
-                            icon: const Icon(
-                              Icons.folder_shared_outlined,
-                              size: 18,
-                            ),
-                            label: const Text('開啟 README'),
-                          ),
-                        ],
-                      ),
-                    ),
-                    const SizedBox(height: 36),
-                    Center(
-                      child: Column(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          GestureDetector(
-                            onTap: () =>
-                                launchUrl(Uri.parse('https://itousouta.me')),
-                            child: Text.rich(
-                              TextSpan(
-                                children: [
-                                  TextSpan(
-                                    text: 'Made with ♥ by ',
-                                    style: TextStyle(
-                                      color: c.mute,
-                                      fontSize: 14,
-                                    ),
-                                  ),
-                                  TextSpan(
-                                    text: 'itouSouta',
-                                    style: TextStyle(
-                                      color: c.blue,
-                                      fontSize: 14,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ),
-                          const SizedBox(height: 6),
-                          GestureDetector(
-                            onTap: () => launchUrl(
-                              Uri.parse(
-                                'https://github.com/itousouta15/itouMD',
-                              ),
-                            ),
-                            child: Text(
-                              '如果喜歡的話歡迎到 GitHub 給個 star ♡',
-                              style: TextStyle(color: c.mute, fontSize: 14),
-                            ),
+                          Divider(height: 1, indent: 56, color: c.border),
+                          _OpenAction(
+                            icon: Icons.link_rounded,
+                            title: '貼上網址',
+                            subtitle: '從 GitHub、Gist 或 HackMD 抓取',
+                            onTap: () => _showInputSheet(isUrl: true),
                           ),
                         ],
                       ),
@@ -685,18 +428,72 @@ class _HomeScreenState extends State<HomeScreen> {
       ),
     );
   }
+
+  Future<void> _showInputSheet({required bool isUrl}) async {
+    final controller = isUrl ? _urlController : _pasteController;
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      showDragHandle: true,
+      builder: (sheetContext) => SafeArea(
+        top: false,
+        child: Padding(
+          padding: EdgeInsets.fromLTRB(
+            20,
+            8,
+            20,
+            MediaQuery.viewInsetsOf(sheetContext).bottom + 24,
+          ),
+          child: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Text(
+                  isUrl ? '從網址開啟' : '貼上 Markdown',
+                  style: Theme.of(sheetContext).textTheme.titleLarge,
+                ),
+                const SizedBox(height: 16),
+                TextField(
+                  controller: controller,
+                  autofocus: true,
+                  keyboardType: isUrl
+                      ? TextInputType.url
+                      : TextInputType.multiline,
+                  minLines: isUrl ? 1 : 5,
+                  maxLines: isUrl ? 2 : 8,
+                  decoration: InputDecoration(
+                    hintText: isUrl
+                        ? '貼上 GitHub、Gist 或 HackMD 網址'
+                        : '# 貼上你的 Markdown 原始碼…',
+                  ),
+                ),
+                const SizedBox(height: 16),
+                ElevatedButton(
+                  onPressed: () {
+                    Navigator.of(sheetContext).pop();
+                    if (isUrl) {
+                      _fetchUrl();
+                    } else {
+                      _openViewer('貼上的內容', controller.text);
+                    }
+                  },
+                  child: Text(isUrl ? '從網址抓取' : '開始檢視'),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
 }
 
 class _Header extends StatefulWidget {
   final ItouColors c;
   final bool isDark;
-  final VoidCallback onOpenSettings;
 
-  const _Header({
-    required this.c,
-    required this.isDark,
-    required this.onOpenSettings,
-  });
+  const _Header({required this.c, required this.isDark});
 
   @override
   State<_Header> createState() => _HeaderState();
@@ -721,9 +518,8 @@ class _HeaderState extends State<_Header> {
   @override
   Widget build(BuildContext context) {
     final c = widget.c;
-    final mono = Theme.of(context).textTheme.labelSmall!;
     return Padding(
-      padding: const EdgeInsets.fromLTRB(20, 20, 20, 28),
+      padding: const EdgeInsets.fromLTRB(20, 12, 20, 22),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -740,29 +536,23 @@ class _HeaderState extends State<_Header> {
                     ? 'assets/logo/logo_nbg.webp'
                     : 'assets/logo/logo_wtnbg.webp',
                 key: ValueKey(_logoIsDark),
-                height: 50,
+                height: 42,
               ),
             ),
           ),
-          const SizedBox(width: 14),
+          const SizedBox(width: 10),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Padding(
-                  padding: const EdgeInsets.only(top: 4),
-                  child: Text(
-                    'itouMD',
-                    style: mono.copyWith(
-                      color: c.text,
-                      fontSize: 20,
-                      letterSpacing: 2,
-                      fontWeight: FontWeight.w700,
-                    ),
-                  ),
+                Text(
+                  'itouMD',
+                  style: Theme.of(
+                    context,
+                  ).textTheme.titleLarge?.copyWith(color: c.text),
                 ),
                 Text(
-                  '手機也能好好用 MD (｡•ᴗ•｡)',
+                  '手機也能好好用 MD',
                   maxLines: 2,
                   overflow: TextOverflow.ellipsis,
                   style: TextStyle(color: c.dim, fontSize: 13, height: 1.4),
@@ -770,71 +560,60 @@ class _HeaderState extends State<_Header> {
               ],
             ),
           ),
-          IconButton(
-            tooltip: '設定',
-            icon: Icon(Icons.settings_outlined, color: c.dim),
-            onPressed: widget.onOpenSettings,
-          ),
         ],
       ),
     );
   }
 }
 
-class _StepCard extends StatelessWidget {
-  final String step;
+class _OpenAction extends StatelessWidget {
+  final IconData icon;
   final String title;
-  final Color accent;
-  final Widget child;
+  final String subtitle;
+  final VoidCallback? onTap;
 
-  const _StepCard({
-    required this.step,
+  const _OpenAction({
+    required this.icon,
     required this.title,
-    required this.accent,
-    required this.child,
+    required this.subtitle,
+    required this.onTap,
   });
 
   @override
   Widget build(BuildContext context) {
     final c = ItouColorsExt.of(context);
-    final mono = Theme.of(context).textTheme.labelSmall!;
-    return Container(
-      decoration: BoxDecoration(
-        color: c.panel,
-        border: Border.all(color: c.border),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Padding(
-            padding: const EdgeInsets.fromLTRB(16, 14, 16, 14),
-            child: Row(
-              children: [
-                Container(
-                  width: 26,
-                  height: 26,
-                  alignment: Alignment.center,
-                  decoration: BoxDecoration(border: Border.all(color: accent)),
-                  child: Text(
-                    step,
-                    style: mono.copyWith(color: accent, fontSize: 11),
-                  ),
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 13),
+          child: Row(
+            children: [
+              Icon(icon, color: c.blue, size: 22),
+              const SizedBox(width: 18),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      title,
+                      style: TextStyle(
+                        color: c.text,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    Text(
+                      subtitle,
+                      style: TextStyle(color: c.dim, fontSize: 12),
+                    ),
+                  ],
                 ),
-                const SizedBox(width: 12),
-                Text(
-                  title,
-                  style: TextStyle(
-                    color: c.text,
-                    fontSize: 14,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-              ],
-            ),
+              ),
+              Icon(Icons.chevron_right_rounded, color: c.mute, size: 20),
+            ],
           ),
-          Divider(height: 1, thickness: 1, color: c.border),
-          Padding(padding: const EdgeInsets.all(16), child: child),
-        ],
+        ),
       ),
     );
   }
@@ -873,6 +652,7 @@ class _RecentDocsPanel extends StatelessWidget {
       decoration: BoxDecoration(
         color: c.panel,
         border: Border.all(color: c.border),
+        borderRadius: BorderRadius.zero,
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -912,9 +692,10 @@ class _RecentDocsPanel extends StatelessWidget {
                         ],
                       ),
                     ),
-                    GestureDetector(
-                      onTap: () => onRemove(docs[i]),
-                      child: Icon(Icons.close, size: 16, color: c.mute),
+                    IconButton(
+                      tooltip: '移除 ${docs[i].title}',
+                      onPressed: () => onRemove(docs[i]),
+                      icon: Icon(Icons.close_rounded, size: 18, color: c.mute),
                     ),
                   ],
                 ),

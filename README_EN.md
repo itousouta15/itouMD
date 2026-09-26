@@ -10,15 +10,9 @@
 
 A modern Markdown viewer and editor for mobile devices, deeply integrated with HackMD.
 
-## Screenshots
+## Navigation
 
-| Onboarding | Home | Viewer |
-| --- | --- | --- |
-| ![Onboarding](site/public/screenshots/01-onboarding.png) | ![Home](site/public/screenshots/02-home.png) | ![Viewer](site/public/screenshots/03-viewer.png) |
-
-| Editor | Notes list | Settings |
-| --- | --- | --- |
-| ![Editor](site/public/screenshots/04-editor.png) | ![HackMD notes](site/public/screenshots/05-notes.png) | ![Settings](site/public/screenshots/06-settings.png) |
+The bottom navigation has three destinations: Home for new and recent documents, Cloud for searchable HackMD notes and GitHub repos, and Settings for appearance, reading, accounts, and sync. Opening a document switches to a full-screen reader/editor.
 
 ## Features
 
@@ -56,7 +50,7 @@ A modern Markdown viewer and editor for mobile devices, deeply integrated with H
 
 - **Account login via OAuth device flow** — authorize on GitHub, no token creation needed (manual PAT stays as an advanced option).
 - **Write back**: files opened from GitHub URLs (blob pages or repo roots) can be edited and pushed back to the repo, with 409-safe three-way conflict handling and an undo action.
-- **Open a repo from home**: type `owner/repo` (or paste a full URL) to open the README directly; private repos work when signed in.
+- **Open a GitHub repo**: under Cloud → GitHub, type `owner/repo` (or paste a full URL) to open the README directly; private repos work when signed in.
 
 ### Other
 
@@ -83,10 +77,12 @@ A modern Markdown viewer and editor for mobile devices, deeply integrated with H
 
 ```
 lib/
-├── main.dart                          App entry: Sentry, theme (system / custom accent & background), UI scale, home / onboarding
+├── main.dart                          App entry: Sentry, theme, UI scale, tabs / onboarding
 ├── theme.dart                         Custom theme & color styles (accent / background derivation)
 ├── screens/
-│   ├── home_screen.dart               Home: new doc, paste, file picker, URL fetch, recents, silent update check, GitHub repo entry
+│   ├── app_shell.dart                 Home / Cloud / Settings bottom navigation
+│   ├── home_screen.dart               Home: new doc, paste, file picker, URL fetch, recents, silent update check
+│   ├── cloud_screen.dart              Cloud: HackMD notes and GitHub repo entry
 │   ├── onboarding_screen.dart         First-launch wizard (5 pages incl. account sign-in guidance)
 │   ├── viewer_screen.dart             Viewer / editor: rendering, line-number editor, toolbar, sync, conflict merge, undo, offline, AI assistant
 │   ├── conflict_screen.dart           Conflict merge screen: diff view, per-block choices, merged preview
@@ -98,6 +94,7 @@ lib/
 ├── services/
 │   ├── markdown_renderer.dart         Markdown → HTML pipeline (runs in an isolate)
 │   ├── markdown_source.dart           Remote Markdown fetching & URL normalization
+│   ├── github_document_opener.dart    Shared GitHub document opening logic
 │   ├── markdown_editor_actions.dart   Editor toolbar / list-continuation pure logic
 │   ├── markdown_diff.dart             Myers diff & three-way merge (pure Dart, unit-tested)
 │   ├── hackmd_syntax.dart             HackMD container syntax, [TOC] expansion
@@ -248,9 +245,9 @@ Without the secrets, CI falls back to debug signing and still builds fine.
 
 ### Basic operations
 
-2. On the home screen, tap "New document" and enter a title to start writing; or paste text, pick a local file, or fetch from a GitHub / Gist / HackMD URL. You can also type `owner/repo` under "Open GitHub repo" to load a README directly.
+2. On Home, tap "New document" and enter a title; use "Open document" to paste text, pick a local file, or fetch from a GitHub / Gist / HackMD URL. Under Cloud → GitHub, enter `owner/repo` (or paste its URL) to open a README directly.
 3. In the viewer, tap the edit icon to switch to edit mode — a line-number gutter appears on the left and the formatting toolbar docks above the keyboard.
-4. Tap "Done" to apply and re-render; the preview scrolls back to the line you were editing. "Save as" exports a `.md` file.
+4. Tap "Done" to apply and re-render; the preview scrolls back to the line you were editing. More actions → "Save as" exports a `.md` file.
 5. Tap the copy icon on a code block to copy the whole block; tap any image for a fullscreen view.
 
 ### HackMD sync & conflict merge
@@ -263,11 +260,11 @@ Without the secrets, CI falls back to debug signing and still builds fine.
 
 ### Browse HackMD notes
 
-11. Home → "Browse my HackMD notes" shows personal and team sections (collapsed by default — tap a header to expand). Pull down to refresh; offline shows the last cached list with an "offline data" badge.
+11. Cloud → HackMD lets you search personal and team notes (collapsed by default — tap a header to expand). Pull down to refresh; offline shows the last cached list with an "offline data" badge.
 
 ### AI assistant
 
-12. In edit mode, tap the ✨ AI button (AppBar or the highlighted toolbar button), or select text and pick "AI assistant" from the menu.
+12. In edit mode, tap the ✨ button in the toolbar, choose More actions → "AI assistant", or select text and pick "AI assistant" from the menu.
 13. The **Presets** tab offers 13 one-shot commands; results show an add/remove diff before you apply.
 14. The **Chat** tab is a free-form, multi-turn conversation with streaming replies; it always knows the document (and your selection), so questions like "make the selected part more casual" work directly. Apply any reply to the editor with the per-message "Apply to editor" link.
 15. AI connection settings live in Settings → AI assistant (built-in free quota via `llm.itousouta.me` or your own OpenAI-compatible endpoint + key; test the connection there).
@@ -279,7 +276,7 @@ Without the secrets, CI falls back to debug signing and still builds fine.
 
 ### Reading & appearance
 
-18. In the viewer, "Display settings" adjusts fonts (including **imported custom fonts** — `.ttf` / `.otf`), font size, and text color (including a custom color picker).
+18. In the viewer, More actions → "Reading settings" adjusts fonts (including **imported custom fonts** — `.ttf` / `.otf`), font size, and text color (including a custom color picker).
 19. Settings → Appearance: theme (follow system / light / dark), per-theme accent and background colors ("auto" derives a tinted background from the accent; panel tones and text contrast adapt automatically), and UI text scale (Standard / Large / Extra-large). Data management (clear recents / offline cache) is also here.
 
 ### In-app updates

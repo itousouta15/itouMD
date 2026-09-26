@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../theme.dart';
 
-/// A bordered card grouping related setting rows — the standard section
+/// A surface grouping related setting rows — the standard section
 /// container used throughout the settings screen.
 class Panel extends StatelessWidget {
   final List<Widget> children;
@@ -16,6 +16,7 @@ class Panel extends StatelessWidget {
       decoration: BoxDecoration(
         color: c.panel,
         border: Border.all(color: c.border),
+        borderRadius: BorderRadius.zero,
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -67,8 +68,7 @@ class SettingRow extends StatelessWidget {
   }
 }
 
-/// A single choice in a small horizontal picker (e.g. theme mode), shown as
-/// a bordered pill that highlights when [selected].
+/// A single choice in a small horizontal picker (e.g. theme mode).
 class ChoiceTile extends StatelessWidget {
   final String label;
   final bool selected;
@@ -84,21 +84,25 @@ class ChoiceTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final c = ItouColorsExt.of(context);
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 12),
-        alignment: Alignment.center,
-        decoration: BoxDecoration(
-          color: selected ? c.panelHover : c.inset,
-          border: Border.all(color: selected ? c.blue : c.border),
-        ),
-        child: Text(
-          label,
-          style: TextStyle(
-            color: selected ? c.text : c.dim,
-            fontSize: 13,
-            fontWeight: selected ? FontWeight.w600 : FontWeight.w400,
+    return Material(
+      color: selected ? c.blue.withValues(alpha: 0.12) : c.inset,
+      borderRadius: BorderRadius.zero,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.zero,
+        child: Container(
+          padding: const EdgeInsets.symmetric(vertical: 11, horizontal: 16),
+          decoration: BoxDecoration(
+            border: Border.all(color: selected ? c.blue : c.border),
+            borderRadius: BorderRadius.zero,
+          ),
+          child: Text(
+            label,
+            style: TextStyle(
+              color: selected ? c.blue : c.dim,
+              fontSize: 13,
+              fontWeight: selected ? FontWeight.w600 : FontWeight.w400,
+            ),
           ),
         ),
       ),
@@ -132,10 +136,10 @@ class ThanksRow extends StatelessWidget {
           decoration: BoxDecoration(
             color: c.inset,
             border: Border.all(color: c.border),
-            borderRadius: BorderRadius.circular(8),
+            borderRadius: BorderRadius.zero,
           ),
           child: ClipRRect(
-            borderRadius: BorderRadius.circular(5),
+            borderRadius: BorderRadius.zero,
             child: Image.asset(logo, fit: BoxFit.contain),
           ),
         ),

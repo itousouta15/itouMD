@@ -102,6 +102,7 @@ class _HackmdAccountScreenState extends State<HackmdAccountScreen> {
                 decoration: BoxDecoration(
                   color: c.panel,
                   border: Border.all(color: c.border),
+                  borderRadius: BorderRadius.zero,
                 ),
                 child: Row(
                   children: [
@@ -118,13 +119,32 @@ class _HackmdAccountScreenState extends State<HackmdAccountScreen> {
               ),
               const SizedBox(height: 16),
             ],
-            Text(
-              'Personal Access Token',
-              style: TextStyle(
-                color: c.text,
-                fontWeight: FontWeight.w600,
-                fontSize: 13,
-              ),
+            Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    'HackMD API Token',
+                    style: TextStyle(
+                      color: c.text,
+                      fontWeight: FontWeight.w600,
+                      fontSize: 13,
+                    ),
+                  ),
+                ),
+                TextButton.icon(
+                  onPressed: () => launchUrl(
+                    Uri.parse('https://hackmd.io/settings#api'),
+                    mode: LaunchMode.externalApplication,
+                  ),
+                  style: TextButton.styleFrom(
+                    foregroundColor: c.blue,
+                    minimumSize: const Size(0, 44),
+                    padding: const EdgeInsets.symmetric(horizontal: 8),
+                  ),
+                  icon: const Icon(Icons.open_in_new, size: 16),
+                  label: const Text('取得 Token'),
+                ),
+              ],
             ),
             const SizedBox(height: 6),
             TextField(
@@ -143,15 +163,10 @@ class _HackmdAccountScreenState extends State<HackmdAccountScreen> {
                 ),
               ),
             ),
-            const SizedBox(height: 6),
-            GestureDetector(
-              onTap: () => launchUrl(
-                Uri.parse('https://hackmd.io/@docs/how-to-issue-an-api-token'),
-              ),
-              child: Text(
-                '怎麼取得 Token？',
-                style: TextStyle(color: c.blue, fontSize: 12),
-              ),
+            const SizedBox(height: 8),
+            Text(
+              '建立後複製 Token，貼到上方欄位。',
+              style: TextStyle(color: c.dim, fontSize: 12),
             ),
             if (_error != null) ...[
               const SizedBox(height: 12),

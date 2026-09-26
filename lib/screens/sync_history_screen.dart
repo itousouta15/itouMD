@@ -88,6 +88,7 @@ class _SyncHistoryScreenState extends State<SyncHistoryScreen> {
                   decoration: BoxDecoration(
                     color: c.panel,
                     border: Border.all(color: c.border),
+                    borderRadius: BorderRadius.zero,
                   ),
                   child: Row(
                     children: [

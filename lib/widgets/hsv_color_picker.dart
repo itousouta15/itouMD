@@ -170,7 +170,7 @@ class _HsvSlider extends StatelessWidget {
               height: 8,
               margin: const EdgeInsets.symmetric(horizontal: 10),
               decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(4),
+                borderRadius: BorderRadius.zero,
                 gradient: LinearGradient(colors: gradientColors),
               ),
             ),

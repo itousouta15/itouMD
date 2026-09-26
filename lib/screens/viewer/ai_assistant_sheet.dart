@@ -69,6 +69,7 @@ class _AiAssistantSheetState extends State<AiAssistantSheet> {
         decoration: BoxDecoration(
           color: c.panel,
           border: Border.all(color: c.border2),
+          borderRadius: BorderRadius.zero,
         ),
         child: SizedBox(
           height: MediaQuery.of(context).size.height * 0.72,
@@ -219,6 +220,7 @@ class _AiPresetTabState extends State<_AiPresetTab> {
                     decoration: BoxDecoration(
                       color: c.inset,
                       border: Border.all(color: c.border),
+                      borderRadius: BorderRadius.zero,
                     ),
                     child: Text(
                       label,
@@ -270,6 +272,7 @@ class _AiPresetTabState extends State<_AiPresetTab> {
               decoration: BoxDecoration(
                 color: c.inset,
                 border: Border.all(color: c.border),
+                borderRadius: BorderRadius.zero,
               ),
               child: SingleChildScrollView(
                 child: _showDiff
@@ -581,7 +584,7 @@ class _ChatBubble extends StatelessWidget {
                 border: Border.all(
                   color: isUser ? c.blue.withValues(alpha: 0.35) : c.border,
                 ),
-                borderRadius: BorderRadius.circular(8),
+                borderRadius: BorderRadius.zero,
               ),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,

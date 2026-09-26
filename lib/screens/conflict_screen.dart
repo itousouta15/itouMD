@@ -194,6 +194,7 @@ class _SummaryPanel extends StatelessWidget {
       decoration: BoxDecoration(
         color: c.panel,
         border: Border.all(color: c.border),
+        borderRadius: BorderRadius.zero,
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -255,7 +256,7 @@ class _AutoMergeSection extends StatelessWidget {
               padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
               decoration: BoxDecoration(
                 color: ItouColors.success.withValues(alpha: 0.15),
-                borderRadius: BorderRadius.circular(4),
+                borderRadius: BorderRadius.zero,
               ),
               child: Text(
                 '將自動合併',
@@ -269,6 +270,7 @@ class _AutoMergeSection extends StatelessWidget {
           decoration: BoxDecoration(
             color: c.panel,
             border: Border.all(color: c.border),
+            borderRadius: BorderRadius.zero,
           ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -484,6 +486,7 @@ class _ConflictCard extends StatelessWidget {
       decoration: BoxDecoration(
         color: c.panel,
         border: Border.all(color: c.border),
+        borderRadius: BorderRadius.zero,
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -569,7 +572,11 @@ class _VariantOption extends StatelessWidget {
                   ),
                 ),
                 child: selected
-                    ? const Icon(Icons.check, size: 13, color: Colors.white)
+                    ? Icon(
+                        Icons.check,
+                        size: 13,
+                        color: Theme.of(context).colorScheme.onPrimary,
+                      )
                     : null,
               ),
               const SizedBox(width: 10),
@@ -646,6 +653,7 @@ class _PreviewToggle extends StatelessWidget {
       decoration: BoxDecoration(
         color: c.panel,
         border: Border.all(color: c.border),
+        borderRadius: BorderRadius.zero,
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,

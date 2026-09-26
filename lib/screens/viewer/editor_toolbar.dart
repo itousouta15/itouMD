@@ -54,7 +54,7 @@ class EditorToolbar extends StatelessWidget {
 
   /// The AI assistant button — visually set apart from the plain format
   /// buttons so it reads as a distinct feature, not another toggle.
-  Widget _aiBtn() {
+  Widget _aiBtn(BuildContext context) {
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
@@ -64,14 +64,18 @@ class EditorToolbar extends StatelessWidget {
           message: 'AI 助理（潤飾／翻譯／改寫）',
           child: Material(
             color: c.blue,
-            borderRadius: BorderRadius.circular(8),
+            borderRadius: BorderRadius.zero,
             child: InkWell(
               onTap: onAi,
-              borderRadius: BorderRadius.circular(8),
-              child: const SizedBox(
+              borderRadius: BorderRadius.zero,
+              child: SizedBox(
                 width: 40,
                 height: 40,
-                child: Icon(Icons.auto_awesome, size: 20, color: Colors.white),
+                child: Icon(
+                  Icons.auto_awesome,
+                  size: 20,
+                  color: Theme.of(context).colorScheme.onPrimary,
+                ),
               ),
             ),
           ),
@@ -106,7 +110,7 @@ class EditorToolbar extends StatelessWidget {
               _btn(Icons.format_list_numbered, '編號清單', onNumberedList),
               _btn(Icons.check_box_outlined, '待辦清單', onTaskList),
               _btn(Icons.link, '連結', onLink),
-              _aiBtn(),
+              _aiBtn(context),
             ],
           ),
         ),

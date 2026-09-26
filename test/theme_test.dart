@@ -10,6 +10,28 @@ import 'package:itou_md/theme.dart';
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
+  testWidgets('default themes use subdued accents and square controls', (
+    tester,
+  ) async {
+    for (final colors in [ItouColors.light, ItouColors.dark]) {
+      expect(HSLColor.fromColor(colors.blue).saturation, lessThan(0.22));
+      final theme = ItouTheme.build(
+        colors,
+        identical(colors, ItouColors.dark) ? Brightness.dark : Brightness.light,
+      );
+      expect(
+        (theme.cardTheme.shape! as RoundedRectangleBorder).borderRadius,
+        BorderRadius.zero,
+      );
+      expect(
+        (theme.elevatedButtonTheme.style!.shape!.resolve({})!
+                as RoundedRectangleBorder)
+            .borderRadius,
+        BorderRadius.zero,
+      );
+    }
+  });
+
   group('ItouColors.withAccent', () {
     test('overrides blue and derives a distinct purple', () {
       const accent = Color(0xFFE05252);
@@ -77,14 +99,14 @@ void main() {
       final lightBg = ItouColors.autoBackground(accent, Brightness.light);
       final lightHsl = HSLColor.fromColor(lightBg);
       expect(lightHsl.hue, closeTo(HSLColor.fromColor(accent).hue, 0.001));
-      expect(lightHsl.saturation, closeTo(0.15, 0.005));
-      expect(lightHsl.lightness, closeTo(0.92, 0.01));
+      expect(lightHsl.saturation, lessThanOrEqualTo(0.11));
+      expect(lightHsl.lightness, closeTo(0.94, 0.01));
 
       final darkBg = ItouColors.autoBackground(accent, Brightness.dark);
       final darkHsl = HSLColor.fromColor(darkBg);
       expect(darkHsl.hue, closeTo(HSLColor.fromColor(accent).hue, 0.001));
-      expect(darkHsl.saturation, closeTo(0.15, 0.005));
-      expect(darkHsl.lightness, closeTo(0.12, 0.01));
+      expect(darkHsl.saturation, lessThanOrEqualTo(0.11));
+      expect(darkHsl.lightness, closeTo(0.13, 0.01));
     });
 
     test('a desaturated accent yields a near-neutral background', () {

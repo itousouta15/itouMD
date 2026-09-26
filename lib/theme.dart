@@ -74,7 +74,9 @@ class ItouColors extends ThemeExtension<ItouColors> {
           purple ??
           hsl
               .withHue((hsl.hue + 35) % 360)
-              .withSaturation((hsl.saturation * 0.7).clamp(0.0, 1.0).toDouble())
+              .withSaturation(
+                (hsl.saturation * 0.45).clamp(0.0, 1.0).toDouble(),
+              )
               .toColor(),
     );
   }
@@ -131,33 +133,33 @@ class ItouColors extends ThemeExtension<ItouColors> {
   }
 
   static const dark = ItouColors(
-    bg: Color(0xFF1B1E23),
-    panel: Color.fromARGB(255, 34, 36, 41),
-    panelHover: Color(0xFF2A2E35),
-    inset: Color(0xFF181B20),
-    border: Color(0x12FFFFFF),
-    border2: Color(0x24FFFFFF),
-    text: Color(0xFFE8EBF2),
-    dim: Color(0xFF9AA1AD),
-    mute: Color(0xFF6A7280),
-    blue: Color(0xFFB0BDF7),
-    purple: Color(0xFFA1ADE0),
+    bg: Color(0xFF1C1D20),
+    panel: Color(0xFF26272B),
+    panelHover: Color(0xFF303238),
+    inset: Color(0xFF202126),
+    border: Color(0xFF3B3D44),
+    border2: Color(0xFF50525C),
+    text: Color(0xFFECECEF),
+    dim: Color(0xFFB3B4BA),
+    mute: Color(0xFF92949C),
+    blue: Color(0xFFAAB2C2),
+    purple: Color(0xFFB4ACB9),
     shadow: Color(0x73000000),
   );
 
   static const light = ItouColors(
-    bg: Color(0xFFBFC0C7),
-    panel: Color(0xFFD5D6DD),
-    panelHover: Color(0xFFCBCCD3),
-    inset: Color(0xFFD2D5DB),
-    border: Color(0x14060607),
-    border2: Color(0x29141828),
-    text: Color(0xFF22262D),
-    dim: Color(0xFF494F59),
-    mute: Color(0xFF6B7280),
-    blue: Color(0xFF364A7C),
-    purple: Color(0xFF5C7CBF),
-    shadow: Color(0x293C465A),
+    bg: Color(0xFFF3F3F2),
+    panel: Color(0xFFFAFAF9),
+    panelHover: Color(0xFFEBECEE),
+    inset: Color(0xFFF0F0EF),
+    border: Color(0xFFE1E2E3),
+    border2: Color(0xFFC8CBD0),
+    text: Color(0xFF25272A),
+    dim: Color(0xFF62666E),
+    mute: Color(0xFF71757E),
+    blue: Color(0xFF5A6780),
+    purple: Color(0xFF746D7F),
+    shadow: Color(0x18333435),
   );
 
   /// A background derived from [accent] — the accent's hue, desaturated to
@@ -167,8 +169,8 @@ class ItouColors extends ThemeExtension<ItouColors> {
   /// A desaturated (grayish) accent yields a near-neutral background.
   static Color autoBackground(Color accent, Brightness brightness) {
     final hsl = HSLColor.fromColor(accent);
-    final saturation = hsl.saturation.clamp(0.0, 0.15).toDouble();
-    final lightness = brightness == Brightness.dark ? 0.12 : 0.92;
+    final saturation = hsl.saturation.clamp(0.0, 0.08).toDouble();
+    final lightness = brightness == Brightness.dark ? 0.13 : 0.94;
     return hsl.withSaturation(saturation).withLightness(lightness).toColor();
   }
 
@@ -192,33 +194,37 @@ class ItouTheme {
     return base
         .apply(bodyColor: c.text, displayColor: c.text)
         .copyWith(
-          titleLarge: GoogleFonts.shipporiMincho(
+          headlineSmall: GoogleFonts.notoSansTc(
             color: c.text,
-            fontWeight: FontWeight.w600,
+            fontWeight: FontWeight.w700,
           ),
-          labelSmall: GoogleFonts.jetBrainsMono(
-            color: c.mute,
-            fontSize: 15,
-            letterSpacing: 1.2,
+          titleLarge: GoogleFonts.notoSansTc(
+            color: c.text,
+            fontWeight: FontWeight.w700,
           ),
+          labelSmall: GoogleFonts.jetBrainsMono(color: c.mute, fontSize: 12),
         );
   }
 
   static ThemeData _build(ItouColors c, Brightness brightness) {
     final textTheme = _textTheme(c);
+    final onAccent = c.blue.computeLuminance() > 0.42
+        ? const Color(0xFF1C1D20)
+        : Colors.white;
     return ThemeData(
+      useMaterial3: true,
       brightness: brightness,
       scaffoldBackgroundColor: c.bg,
       colorScheme: ColorScheme(
         brightness: brightness,
         primary: c.blue,
-        onPrimary: c.bg,
+        onPrimary: onAccent,
         secondary: c.purple,
-        onSecondary: c.bg,
+        onSecondary: c.text,
         surface: c.panel,
         onSurface: c.text,
         error: ItouColors.danger,
-        onError: c.bg,
+        onError: Colors.white,
       ),
       textTheme: textTheme,
       fontFamily: GoogleFonts.notoSansTc().fontFamily,
@@ -226,11 +232,11 @@ class ItouTheme {
         backgroundColor: c.bg,
         foregroundColor: c.text,
         elevation: 0,
-        titleTextStyle: GoogleFonts.jetBrainsMono(
+        scrolledUnderElevation: 0,
+        titleTextStyle: GoogleFonts.notoSansTc(
           color: c.text,
-          fontSize: 16,
-          letterSpacing: 1.5,
-          fontWeight: FontWeight.w600,
+          fontSize: 18,
+          fontWeight: FontWeight.w700,
         ),
       ),
       cardTheme: CardThemeData(
@@ -241,6 +247,22 @@ class ItouTheme {
           side: BorderSide(color: c.border, width: 1),
           borderRadius: BorderRadius.zero,
         ),
+      ),
+      navigationBarTheme: NavigationBarThemeData(
+        backgroundColor: c.panel,
+        indicatorColor: c.blue.withValues(alpha: 0.13),
+        indicatorShape: const StadiumBorder(),
+        elevation: 0,
+        height: 72,
+        labelTextStyle: WidgetStatePropertyAll(
+          TextStyle(fontSize: 12, color: c.text, fontWeight: FontWeight.w600),
+        ),
+      ),
+      tabBarTheme: TabBarThemeData(
+        labelColor: c.blue,
+        unselectedLabelColor: c.dim,
+        indicatorColor: c.blue,
+        dividerColor: c.border,
       ),
       dividerColor: c.border,
       inputDecorationTheme: InputDecorationTheme(
@@ -256,27 +278,56 @@ class ItouTheme {
         ),
         focusedBorder: OutlineInputBorder(
           borderRadius: BorderRadius.zero,
-          borderSide: BorderSide(color: c.blue),
+          borderSide: BorderSide(color: c.blue, width: 1.5),
         ),
         hintStyle: TextStyle(color: c.mute),
+        contentPadding: const EdgeInsets.symmetric(
+          horizontal: 16,
+          vertical: 14,
+        ),
       ),
       elevatedButtonTheme: ElevatedButtonThemeData(
         style: ElevatedButton.styleFrom(
-          backgroundColor: c.panel,
-          foregroundColor: c.text,
+          backgroundColor: c.blue,
+          foregroundColor: onAccent,
           elevation: 0,
-          side: BorderSide(color: c.border2),
-          shape: const RoundedRectangleBorder(borderRadius: BorderRadius.zero),
-          padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 20),
-          textStyle: GoogleFonts.jetBrainsMono(
-            fontSize: 13,
-            letterSpacing: 1,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.zero),
+          padding: const EdgeInsets.symmetric(vertical: 15, horizontal: 20),
+          textStyle: GoogleFonts.notoSansTc(
+            fontSize: 14,
             fontWeight: FontWeight.w600,
           ),
         ),
       ),
+      outlinedButtonTheme: OutlinedButtonThemeData(
+        style: OutlinedButton.styleFrom(
+          foregroundColor: c.text,
+          side: BorderSide(color: c.border2),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.zero),
+          padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 16),
+        ),
+      ),
+      textButtonTheme: TextButtonThemeData(
+        style: TextButton.styleFrom(
+          shape: const RoundedRectangleBorder(borderRadius: BorderRadius.zero),
+        ),
+      ),
+      dialogTheme: DialogThemeData(
+        backgroundColor: c.panel,
+        shape: const RoundedRectangleBorder(borderRadius: BorderRadius.zero),
+      ),
+      popupMenuTheme: PopupMenuThemeData(
+        color: c.panel,
+        shape: const RoundedRectangleBorder(borderRadius: BorderRadius.zero),
+      ),
+      snackBarTheme: const SnackBarThemeData(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.zero),
+      ),
+      bottomSheetTheme: BottomSheetThemeData(
+        backgroundColor: c.panel,
+        shape: const RoundedRectangleBorder(borderRadius: BorderRadius.zero),
+      ),
       iconTheme: IconThemeData(color: c.dim),
-      splashFactory: NoSplash.splashFactory,
       highlightColor: c.panelHover,
       extensions: [c],
     );

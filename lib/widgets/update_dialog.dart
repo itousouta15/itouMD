@@ -192,7 +192,7 @@ class _UpdateDialogState extends State<_UpdateDialog> {
             if (_downloading) ...[
               const SizedBox(height: 16),
               ClipRRect(
-                borderRadius: BorderRadius.circular(4),
+                borderRadius: BorderRadius.zero,
                 child: LinearProgressIndicator(
                   value: _progress,
                   minHeight: 6,

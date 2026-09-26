@@ -4,19 +4,19 @@ import 'package:shared_preferences/shared_preferences.dart';
 /// Accent presets offered for the light theme — darker shades (lightness
 /// 0.4–0.6) that keep contrast against light backgrounds.
 const lightAccentPresets = <Color>[
-  Color(0xFF2E9E9E),
-  Color(0xFF6BAE5E),
-  Color(0xFFC77B4A),
-  Color(0xFF8B6FC0),
+  Color(0xFF4D7979),
+  Color(0xFF637E61),
+  Color(0xFF98725B),
+  Color(0xFF776B93),
 ];
 
 /// Accent presets offered for the dark theme — brighter shades (lightness
 /// 0.5–0.9) that stay visible against dark backgrounds.
 const darkAccentPresets = <Color>[
-  Color(0xFF4FC3C3),
-  Color(0xFF9CCC9C),
-  Color(0xFFE8B08A),
-  Color(0xFFB39DDB),
+  Color(0xFF95B8B8),
+  Color(0xFFA2B69E),
+  Color(0xFFC3AC9A),
+  Color(0xFFADA4BE),
 ];
 
 /// The user-chosen theme colours, persisted per brightness so light and

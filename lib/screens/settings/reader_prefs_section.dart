@@ -47,6 +47,7 @@ class ReaderPrefsSection extends StatelessWidget {
             decoration: BoxDecoration(
               color: c.inset,
               border: Border.all(color: c.border),
+              borderRadius: BorderRadius.zero,
             ),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,

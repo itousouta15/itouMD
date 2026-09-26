@@ -28,6 +28,9 @@ import 'settings/theme_colors_section.dart';
 import 'sync_history_screen.dart';
 
 class SettingsScreen extends StatefulWidget {
+  final bool embedded;
+  final VoidCallback? onRecentsChanged;
+  final int refreshToken;
   final ThemeMode themeMode;
   final ValueChanged<ThemeMode> onThemeModeChanged;
   final ThemeCustomization customization;
@@ -37,6 +40,9 @@ class SettingsScreen extends StatefulWidget {
 
   const SettingsScreen({
     super.key,
+    this.embedded = false,
+    this.onRecentsChanged,
+    this.refreshToken = 0,
     required this.themeMode,
     required this.onThemeModeChanged,
     required this.customization,
@@ -96,6 +102,15 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 
   @override
+  void didUpdateWidget(covariant SettingsScreen oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.refreshToken != oldWidget.refreshToken) {
+      _loadAccount();
+      _loadGithubAccount();
+    }
+  }
+
+  @override
   void dispose() {
     _llmBaseUrlController.dispose();
     _llmModelController.dispose();
@@ -138,14 +153,22 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 
   Future<void> _loadAccount() async {
-    final token = await HackmdAccount.getToken();
+    String? token;
+    try {
+      token = await HackmdAccount.getToken();
+    } catch (_) {
+      return;
+    }
     if (!mounted) return;
-    if (token == null || token.isEmpty) return;
+    if (token == null || token.isEmpty) {
+      setState(() => _user = null);
+      return;
+    }
     try {
       final user = await HackmdApi.getMe(token);
       if (mounted) setState(() => _user = user);
     } on HackmdApiException {
-      // Token stored but invalid — show as disconnected.
+      if (mounted) setState(() => _user = null);
     } catch (_) {
       // Offline — don't clear the cached user state.
     }
@@ -159,14 +182,22 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 
   Future<void> _loadGithubAccount() async {
-    final token = await GithubAccount.getToken();
+    String? token;
+    try {
+      token = await GithubAccount.getToken();
+    } catch (_) {
+      return;
+    }
     if (!mounted) return;
-    if (token == null || token.isEmpty) return;
+    if (token == null || token.isEmpty) {
+      setState(() => _githubUser = null);
+      return;
+    }
     try {
       final login = await GithubApi.getAuthenticatedUser(token);
       if (mounted) setState(() => _githubUser = login);
     } on GithubApiException {
-      // Token stored but invalid — show as disconnected.
+      if (mounted) setState(() => _githubUser = null);
     } catch (_) {
       // Offline — don't clear the cached user state.
     }
@@ -339,6 +370,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
   Future<void> _clearRecents() async {
     await RecentDocs.clear();
+    widget.onRecentsChanged?.call();
     if (!mounted) return;
     ScaffoldMessenger.of(
       context,
@@ -359,7 +391,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     return Scaffold(
       backgroundColor: c.bg,
-      appBar: AppBar(title: const Text('設定')),
+      appBar: AppBar(
+        title: const Text('設定'),
+        automaticallyImplyLeading: !widget.embedded,
+      ),
       body: ListView(
         padding: const EdgeInsets.fromLTRB(16, 4, 16, 32),
         children: [

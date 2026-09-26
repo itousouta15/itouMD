@@ -30,3 +30,16 @@ flutter run -d <device-id> --debug
 ```
 
 `<device-id>` 用 `flutter devices` 或 `adb devices -l` 查，通常長得像 `emulator-5554`。
+
+## Windows 桌面預覽
+
+要用 `flutter run -d windows` 預覽桌面版，需要安裝**完整 JDK**（含 `include/jni.h` 與 `lib/jvm.lib`）。`sentry_flutter` 的 JNI 原生套件在 Windows 建置時會用到這兩個檔案；只有 Java 8 JRE，或沒有 `include/` 的 Android Studio JBR，都無法通過 CMake 的 `FindJNI`。
+
+在 PowerShell 設定 JDK 目錄後再啟動：
+
+```powershell
+$env:JAVA_HOME = 'C:\path\to\jdk-21'
+flutter run -d windows
+```
+
+`windows/CMakeLists.txt` 會把建置產物安裝到 `build/windows/x64/runner/Debug/`，無須以系統管理員身分寫入 `C:\Program Files`。

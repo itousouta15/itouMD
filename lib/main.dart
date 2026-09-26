@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:sentry_flutter/sentry_flutter.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-import 'screens/home_screen.dart';
+import 'screens/app_shell.dart';
 import 'screens/onboarding_screen.dart';
 import 'services/custom_fonts.dart';
 import 'services/theme_prefs.dart';
@@ -183,7 +183,7 @@ class _ItouMdAppState extends State<ItouMdApp> {
         );
       },
       home: _onboardingDone
-          ? HomeScreen(
+          ? AppShell(
               themeMode: _themeMode,
               onThemeModeChanged: _setThemeMode,
               customization: _custom,

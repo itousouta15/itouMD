@@ -159,7 +159,7 @@ class _OnboardingScreenState extends State<OnboardingScreen>
                     margin: const EdgeInsets.symmetric(horizontal: 4),
                     decoration: BoxDecoration(
                       color: i == _page ? c.blue : c.border2,
-                      borderRadius: BorderRadius.circular(4),
+                      borderRadius: BorderRadius.zero,
                     ),
                   ),
               ],
@@ -275,7 +275,6 @@ class _LoginPageState extends State<_LoginPage> {
                 decoration: BoxDecoration(
                   color: c.panel,
                   border: Border.all(color: c.border),
-                  borderRadius: BorderRadius.circular(28),
                 ),
                 child: Icon(
                   _isHackmd ? Icons.cloud_outlined : Icons.code,
@@ -386,7 +385,6 @@ class _OnboardingPageView extends StatelessWidget {
                 decoration: BoxDecoration(
                   color: c.panel,
                   border: Border.all(color: c.border),
-                  borderRadius: BorderRadius.circular(28),
                 ),
                 child: Icon(page.icon, size: 56, color: c.blue),
               ),

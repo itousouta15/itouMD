@@ -145,6 +145,7 @@ class _GithubAccountScreenState extends State<GithubAccountScreen> {
                 decoration: BoxDecoration(
                   color: c.panel,
                   border: Border.all(color: c.border),
+                  borderRadius: BorderRadius.zero,
                 ),
                 child: Row(
                   children: [

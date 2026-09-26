@@ -16,6 +16,62 @@ void main() {
     expect(find.text('貼上網址'), findsOneWidget);
   });
 
+  testWidgets('Home keeps file actions close and opens paste in a sheet', (
+    WidgetTester tester,
+  ) async {
+    SharedPreferences.setMockInitialValues({'itou_md_onboarding_done': true});
+    await tester.pumpWidget(const ItouMdApp(onboardingDone: true));
+    await tester.pumpAndSettle();
+
+    expect(find.text('建立新文件'), findsOneWidget);
+    expect(find.text('首頁'), findsOneWidget);
+    expect(find.text('雲端'), findsOneWidget);
+    expect(find.text('設定'), findsOneWidget);
+
+    await tester.ensureVisible(find.text('貼上文字'));
+    await tester.tap(find.text('貼上文字'));
+    await tester.pumpAndSettle();
+    expect(find.text('貼上 Markdown'), findsOneWidget);
+    expect(find.text('開始檢視'), findsOneWidget);
+  });
+
+  testWidgets('Cloud navigation exposes both document sources', (
+    WidgetTester tester,
+  ) async {
+    SharedPreferences.setMockInitialValues({'itou_md_onboarding_done': true});
+    await tester.pumpWidget(const ItouMdApp(onboardingDone: true));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('雲端'));
+    await tester.pump(const Duration(milliseconds: 350));
+    expect(find.text('HackMD'), findsOneWidget);
+    expect(find.text('GitHub'), findsOneWidget);
+
+    await tester.tap(find.text('GitHub'));
+    await tester.pump(const Duration(milliseconds: 350));
+    await tester.pump(const Duration(milliseconds: 350));
+    expect(find.text('開啟 GitHub 文件'), findsOneWidget);
+    expect(find.text('我的 Repo'), findsOneWidget);
+  });
+
+  testWidgets('Settings is a tab and keeps theme customization available', (
+    WidgetTester tester,
+  ) async {
+    SharedPreferences.setMockInitialValues({'itou_md_onboarding_done': true});
+    await tester.pumpWidget(const ItouMdApp(onboardingDone: true));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('設定'));
+    await tester.pumpAndSettle();
+    expect(find.text('外觀'), findsOneWidget);
+    expect(find.text('跟隨系統'), findsOneWidget);
+    expect(find.text('主題顏色'), findsOneWidget);
+
+    await tester.tap(find.text('首頁'));
+    await tester.pumpAndSettle();
+    expect(find.text('建立新文件'), findsOneWidget);
+  });
+
   testWidgets('First launch shows the onboarding wizard', (
     WidgetTester tester,
   ) async {

@@ -956,6 +956,7 @@ class _ViewerScreenState extends State<ViewerScreen> {
       decoration: BoxDecoration(
         color: c.inset,
         border: Border.all(color: c.border),
+        borderRadius: BorderRadius.zero,
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -1068,31 +1069,38 @@ class _ViewerScreenState extends State<ViewerScreen> {
 
     return Scaffold(
       appBar: AppBar(
-        title: Text(widget.title, overflow: TextOverflow.ellipsis),
+        title: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(widget.title, maxLines: 1, overflow: TextOverflow.ellipsis),
+            Text(
+              _isHackmdDoc
+                  ? 'HackMD 筆記'
+                  : _isGithubDoc
+                  ? 'GitHub 文件'
+                  : _isLocalFile
+                  ? '本機檔案'
+                  : 'Markdown 文件',
+              style: TextStyle(color: c.dim, fontSize: 11),
+            ),
+          ],
+        ),
         actions: [
           IconButton(
             tooltip: _editing ? '完成編輯' : '編輯',
-            icon: Icon(_editing ? Icons.done_outlined : Icons.edit_outlined),
-            onPressed: _editing ? _applyEdit : _enterEdit,
-          ),
-          if (_editing)
-            IconButton(
-              tooltip: 'AI 助理',
-              icon: Icon(Icons.auto_awesome, color: c.blue),
-              onPressed: _openAiAssistant,
+            icon: Icon(
+              _editing ? Icons.check_rounded : Icons.edit_outlined,
+              color: c.blue,
             ),
-          IconButton(
-            tooltip: '另存新檔',
-            icon: const Icon(Icons.save_alt_outlined),
-            onPressed: () => _saveAs(context),
+            onPressed: _editing ? _applyEdit : _enterEdit,
           ),
           if (_isLocalFile)
             IconButton(
               tooltip: '存回原檔',
-              icon: const Icon(Icons.save_outlined),
+              icon: Icon(Icons.save_outlined, color: c.blue),
               onPressed: () => _saveInPlace(context),
             ),
-          if (_isHackmdDoc) ...[
+          if (_isHackmdDoc)
             IconButton(
               tooltip: '同步到 HackMD',
               icon: _syncingToHackmd
@@ -1101,15 +1109,9 @@ class _ViewerScreenState extends State<ViewerScreen> {
                       height: 20,
                       child: CircularProgressIndicator(strokeWidth: 2),
                     )
-                  : const Icon(Icons.cloud_upload_outlined),
+                  : Icon(Icons.cloud_upload_outlined, color: c.blue),
               onPressed: _syncingToHackmd ? null : () => _syncToHackmd(context),
             ),
-            IconButton(
-              tooltip: '在 HackMD 開啟',
-              icon: const Icon(Icons.open_in_new),
-              onPressed: () => launchUrl(Uri.parse(widget.sourceRef!)),
-            ),
-          ],
           if (_isGithubDoc)
             IconButton(
               tooltip: '寫回 GitHub',
@@ -1119,39 +1121,41 @@ class _ViewerScreenState extends State<ViewerScreen> {
                       height: 20,
                       child: CircularProgressIndicator(strokeWidth: 2),
                     )
-                  : const Icon(Icons.upload_outlined),
+                  : Icon(Icons.upload_outlined, color: c.blue),
               onPressed: _syncingToGithub ? null : () => _syncToGithub(context),
             ),
-          if (!_editing)
-            PopupMenuButton<String>(
-              tooltip: '更多',
-              icon: const Icon(Icons.more_vert),
-              color: c.panel,
-              onSelected: (value) {
-                switch (value) {
-                  case 'settings':
-                    _openReaderSettings(context);
-                  case 'copy':
-                    _copyRaw(context);
-                }
-              },
-              itemBuilder: (menuContext) => [
-                PopupMenuItem(
-                  value: 'settings',
-                  child: Text(
-                    '顯示設定',
-                    style: TextStyle(color: c.text, fontSize: 13),
-                  ),
+          PopupMenuButton<String>(
+            tooltip: '更多操作',
+            icon: const Icon(Icons.more_vert_rounded),
+            color: c.panel,
+            onSelected: (value) {
+              switch (value) {
+                case 'saveAs':
+                  _saveAs(context);
+                case 'settings':
+                  _openReaderSettings(context);
+                case 'copy':
+                  _copyRaw(context);
+                case 'ai':
+                  _openAiAssistant();
+                case 'openHackmd':
+                  launchUrl(Uri.parse(widget.sourceRef!));
+              }
+            },
+            itemBuilder: (_) => [
+              const PopupMenuItem(value: 'saveAs', child: Text('另存新檔')),
+              if (_editing)
+                const PopupMenuItem(value: 'ai', child: Text('AI 助理')),
+              if (!_editing)
+                const PopupMenuItem(value: 'settings', child: Text('閱讀設定')),
+              const PopupMenuItem(value: 'copy', child: Text('複製原始碼')),
+              if (_isHackmdDoc)
+                const PopupMenuItem(
+                  value: 'openHackmd',
+                  child: Text('在 HackMD 開啟'),
                 ),
-                PopupMenuItem(
-                  value: 'copy',
-                  child: Text(
-                    '複製原始碼',
-                    style: TextStyle(color: c.text, fontSize: 13),
-                  ),
-                ),
-              ],
-            ),
+            ],
+          ),
         ],
       ),
       // The reader content and editor keep their own explicit font sizes —

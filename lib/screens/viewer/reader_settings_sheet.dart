@@ -41,6 +41,7 @@ class _ReaderSettingsSheetState extends State<ReaderSettingsSheet> {
         decoration: BoxDecoration(
           color: c.panel,
           border: Border.all(color: c.border2),
+          borderRadius: BorderRadius.zero,
         ),
         child: SingleChildScrollView(
           child: Column(
