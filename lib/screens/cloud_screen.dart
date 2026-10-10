@@ -10,6 +10,7 @@ import 'github_account_screen.dart';
 import 'github_repo_picker_screen.dart';
 import 'hackmd_notes_screen.dart';
 import 'viewer_screen.dart';
+import 'collab_cloud_tab.dart';
 
 class CloudScreen extends StatelessWidget {
   final VoidCallback? onRecentsChanged;
@@ -20,7 +21,7 @@ class CloudScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return DefaultTabController(
-      length: 2,
+      length: 3,
       child: Scaffold(
         appBar: AppBar(
           title: const Text('雲端'),
@@ -28,6 +29,7 @@ class CloudScreen extends StatelessWidget {
             tabs: [
               Tab(text: 'HackMD'),
               Tab(text: 'GitHub'),
+              Tab(text: '本機協作'),
             ],
           ),
         ),
@@ -42,6 +44,7 @@ class CloudScreen extends StatelessWidget {
               onRecentsChanged: onRecentsChanged,
               refreshToken: refreshToken,
             ),
+            const CollabCloudTab(),
           ],
         ),
       ),

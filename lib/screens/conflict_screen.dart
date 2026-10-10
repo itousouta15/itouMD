@@ -21,12 +21,14 @@ class ConflictScreen extends StatefulWidget {
   final String base;
   final String local;
   final String remote;
+  final bool allowOverwrite;
 
   const ConflictScreen({
     super.key,
     required this.base,
     required this.local,
     required this.remote,
+    this.allowOverwrite = true,
   });
 
   @override
@@ -128,9 +130,11 @@ class _ConflictScreenState extends State<ConflictScreen>
           ),
           _BottomBar(
             onCancel: () => Navigator.of(context).pop(),
-            onOverwrite: () => Navigator.of(
-              context,
-            ).pop(MergeOutcome(MergeAction.overwrite, widget.local)),
+            onOverwrite: !widget.allowOverwrite
+                ? null
+                : () => Navigator.of(
+                    context,
+                  ).pop(MergeOutcome(MergeAction.overwrite, widget.local)),
             onMerge: () => Navigator.of(
               context,
             ).pop(MergeOutcome(MergeAction.merged, _mergedText)),
@@ -709,7 +713,7 @@ class _PreviewToggle extends StatelessWidget {
 
 class _BottomBar extends StatelessWidget {
   final VoidCallback onCancel;
-  final VoidCallback onOverwrite;
+  final VoidCallback? onOverwrite;
   final VoidCallback onMerge;
   final ItouColors c;
 
@@ -734,13 +738,15 @@ class _BottomBar extends StatelessWidget {
           child: Row(
             children: [
               TextButton(onPressed: onCancel, child: const Text('取消')),
-              const SizedBox(width: 8),
-              Expanded(
-                child: OutlinedButton(
-                  onPressed: onOverwrite,
-                  child: const Text('直接用本地覆蓋'),
+              if (onOverwrite != null) ...[
+                const SizedBox(width: 8),
+                Expanded(
+                  child: OutlinedButton(
+                    onPressed: onOverwrite,
+                    child: const Text('直接用本地覆蓋'),
+                  ),
                 ),
-              ),
+              ],
               const SizedBox(width: 8),
               Expanded(
                 child: ElevatedButton(

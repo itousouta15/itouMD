@@ -1,0 +1,26 @@
+:root { font-family: system-ui, sans-serif; color: #dce6f6; background: #0d1524; color-scheme: dark; }
+body { margin: 0; }
+main { max-width: 1100px; margin: 0 auto; padding: 36px 24px; }
+.eyebrow { font-size: 12px; letter-spacing: .15em; color: #71dbc4; font-weight: 700; }
+h1 { font-size: clamp(26px, 5vw, 38px); margin: 10px 0; }
+header p, aside, footer { color: #a9b9d1; }
+form, .toolbar, footer { display: flex; align-items: center; flex-wrap: wrap; gap: 12px; margin: 20px 0; }
+input, button { font: inherit; border: 1px solid #405475; border-radius: 7px; padding: 9px 13px; background: #17253d; color: #edf5ff; }
+input { max-width: 220px; }
+button { cursor: pointer; }
+button:hover:not(:disabled) { border-color: #71dbc4; background: #203550; }
+button:disabled { opacity: .45; cursor: default; }
+button:focus-visible, input:focus-visible { outline: 2px solid #71dbc4; outline-offset: 3px; }
+#status { margin-right: auto; color: #ffd28c; }
+#status[data-connected=true] { color: #71dbc4; }
+#editor { border: 1px solid #405475; border-radius: 8px; overflow: hidden; background: #f8fafc; color: #17253d; }
+.cm-editor { min-height: 420px; font-size: 16px; }
+.cm-scroller { overflow: auto; font-family: ui-monospace, monospace; }
+.cm-content { min-height: 420px; }
+.cm-editor.cm-focused { outline: 2px solid #71dbc4; }
+footer { justify-content: space-between; font-size: 13px; }
+h2 { font-size: 18px; }
+#notice { color: #ffd28c; min-height: 24px; }
+#versions { padding-left: 20px; }
+#versions li { margin: 8px 0; }
+aside { border-top: 1px solid #405475; margin-top: 28px; padding-top: 20px; font-size: 14px; line-height: 1.6; }

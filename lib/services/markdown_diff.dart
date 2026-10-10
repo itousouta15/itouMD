@@ -229,159 +229,138 @@ List<_Hunk> _toHunks(List<String> baseLines, List<String> newLines) {
 }
 
 MergeResult mergeLines(String base, String local, String remote) {
-  final b = _lines(base);
-  final l = _lines(local);
-  final r = _lines(remote);
+  // Keep line terminators in merge tokens: otherwise an empty document becomes
+  // a blank line and every sync silently adds a final newline.
+  List<String> tokens(String text) => RegExp(r'[^\n]*\n|[^\n]+$')
+      .allMatches(text.replaceAll('\r\n', '\n'))
+      .map((match) => match[0]!)
+      .toList();
+  List<String> displayLines(List<String> lines) => lines
+      .map(
+        (line) =>
+            line.endsWith('\n') ? line.substring(0, line.length - 1) : line,
+      )
+      .toList();
+  final b = tokens(base);
+  final l = tokens(local);
+  final r = tokens(remote);
   final lHunks = _toHunks(b, l);
   final rHunks = _toHunks(b, r);
-
   final segments = <MergeSegment>[];
   final autoApplied = <AutoAppliedHunk>[];
-  var removedCount = 0;
-  var addedCount = 0;
+  final changes =
+      [
+        for (final hunk in lHunks) (local: true, hunk: hunk),
+        for (final hunk in rHunks) (local: false, hunk: hunk),
+      ]..sort((a, b) {
+        final order = a.hunk.baseStart.compareTo(b.hunk.baseStart);
+        return order != 0 ? order : a.hunk.baseEnd.compareTo(b.hunk.baseEnd);
+      });
 
-  for (final h in rHunks) {
-    removedCount += h.baseEnd - h.baseStart;
-    addedCount += h.lines.length;
-  }
-
-  // Every emitted segment carries its own trailing newline, so the merged
-  // result is a plain concatenation of segment texts. A pure deletion
-  // (empty replacement) emits no text at all.
-  String hunkText(_Hunk h) => h.lines.isEmpty ? '' : '${h.lines.join('\n')}\n';
-  String lineText(String s) => '$s\n';
-
-  // Base line index ??the hunk that replaces it (non-insertion hunks only).
-  final lCoverage = <int, _Hunk>{};
-  for (final h in lHunks) {
-    if (h.isInsertion) continue;
-    for (var j = h.baseStart; j < h.baseEnd; j++) {
-      lCoverage[j] = h;
+  List<String> variant(List<_Hunk> hunks, int start, int end) {
+    final lines = <String>[];
+    var cursor = start;
+    for (final hunk in hunks) {
+      lines.addAll(b.sublist(cursor, hunk.baseStart));
+      lines.addAll(hunk.lines);
+      cursor = hunk.baseEnd;
     }
+    lines.addAll(b.sublist(cursor, end));
+    return lines;
   }
-  final rCoverage = <int, _Hunk>{};
-  for (final h in rHunks) {
-    if (h.isInsertion) continue;
-    for (var j = h.baseStart; j < h.baseEnd; j++) {
-      rCoverage[j] = h;
+
+  // Merge two sides whose replaced base ranges are disjoint. Returns null when
+  // either side is an insertion, when the ranges overlap, or when splicing the
+  // two edits together would fuse two tokens into a single line (the one
+  // outcome the conflict screen must never produce silently).
+  List<String>? autoMerge(
+    List<_Hunk> local,
+    List<_Hunk> remote,
+    int start,
+    int end,
+  ) {
+    if (local.any((h) => h.isInsertion) || remote.any((h) => h.isInsertion)) {
+      return null;
     }
-  }
-
-  // Hunks whose base ranges overlap (both sides edited the same lines).
-  final lConflictWith = <_Hunk, _Hunk>{};
-  final rConflictWith = <_Hunk, _Hunk>{};
-  for (final lh in lCoverage.values.toSet()) {
-    for (final rh in rCoverage.values.toSet()) {
-      if (lh.baseStart < rh.baseEnd && rh.baseStart < lh.baseEnd) {
-        lConflictWith[lh] = rh;
-        rConflictWith[rh] = lh;
-      }
+    final all = [...local, ...remote]
+      ..sort((a, c) => a.baseStart.compareTo(c.baseStart));
+    var previousEnd = start;
+    for (final hunk in all) {
+      if (hunk.baseStart < previousEnd || hunk.baseEnd > end) return null;
+      previousEnd = hunk.baseEnd;
     }
-  }
-
-  final emittedL = <_Hunk>{};
-  final emittedR = <_Hunk>{};
-
-  // Both sides changed the same region. Identical changes are not a
-  // conflict; only genuinely different variants are.
-  void emitConflict(_Hunk lH, _Hunk rH) {
-    if (listEquals(lH.lines, rH.lines)) {
-      segments.add(TextSegment(hunkText(lH)));
-    } else {
-      segments.add(ConflictSegment(local: hunkText(lH), remote: hunkText(rH)));
+    final merged = <String>[];
+    var at = start;
+    for (final hunk in all) {
+      merged.addAll(b.sublist(at, hunk.baseStart));
+      merged.addAll(hunk.lines);
+      at = hunk.baseEnd;
     }
-    emittedL.add(lH);
-    emittedR.add(rH);
-  }
-
-  void emitLocalOnly(_Hunk h) {
-    segments.add(TextSegment(hunkText(h)));
-    emittedL.add(h);
-  }
-
-  void emitRemoteOnly(_Hunk h) {
-    segments.add(TextSegment(hunkText(h)));
-    emittedR.add(h);
-    autoApplied.add(
-      AutoAppliedHunk(
-        removed: b.sublist(h.baseStart, h.baseEnd).toList(),
-        added: h.lines,
-      ),
-    );
-  }
-
-  // Insertions attached to a boundary, pulled from the sorted hunk lists.
-  List<_Hunk> takeInsertions(List<_Hunk> hunks, int at, int from) {
-    final out = <_Hunk>[];
-    var i = from;
-    while (i < hunks.length &&
-        (hunks[i].isInsertion && hunks[i].baseStart == at)) {
-      out.add(hunks[i++]);
+    merged.addAll(b.sublist(at, end));
+    // Any token that is followed by more output must end a line; otherwise the
+    // merge would concatenate two lines. Defer to a conflict in that case.
+    for (var j = 0; j + 1 < merged.length; j++) {
+      if (!merged[j].endsWith('\n')) return null;
     }
-    return out;
+    if (merged.isNotEmpty && !merged.last.endsWith('\n') && end < b.length) {
+      return null;
+    }
+    return merged;
   }
 
-  var li = 0;
-  var ri = 0;
-
-  void flushInsertions(int boundary) {
-    final lIns = takeInsertions(lHunks, boundary, li);
-    final rIns = takeInsertions(rHunks, boundary, ri);
-    li += lIns.length;
-    ri += rIns.length;
-    if (lIns.isEmpty && rIns.isEmpty) return;
-    if (lIns.isNotEmpty && rIns.isNotEmpty) {
-      emitConflict(lIns.first, rIns.first);
-    } else if (lIns.isNotEmpty) {
-      segments.add(TextSegment(lIns.map(hunkText).join()));
-    } else {
-      segments.add(TextSegment(rIns.map(hunkText).join()));
+  // Group touching or overlapping changes into one region. Each conflict then
+  // carries both FULL variants of the region, including unchanged lines one side
+  // still retains. Genuinely independent edits on disjoint lines still merge.
+  var cursor = 0;
+  var index = 0;
+  while (index < changes.length) {
+    final start = changes[index].hunk.baseStart;
+    var end = changes[index].hunk.baseEnd;
+    final localHunks = <_Hunk>[];
+    final remoteHunks = <_Hunk>[];
+    do {
+      final change = changes[index++];
+      (change.local ? localHunks : remoteHunks).add(change.hunk);
+      if (change.hunk.baseEnd > end) end = change.hunk.baseEnd;
+    } while (index < changes.length && changes[index].hunk.baseStart <= end);
+    segments.add(TextSegment(b.sublist(cursor, start).join()));
+    final left = variant(localHunks, start, end);
+    final right = variant(remoteHunks, start, end);
+    if (localHunks.isEmpty) {
+      segments.add(TextSegment(right.join()));
       autoApplied.add(
         AutoAppliedHunk(
-          removed: const [],
-          added: rIns.expand((h) => h.lines).toList(),
+          removed: displayLines(b.sublist(start, end)),
+          added: displayLines(right),
         ),
       );
+    } else if (remoteHunks.isEmpty) {
+      segments.add(TextSegment(left.join()));
+    } else if (listEquals(left, right)) {
+      segments.add(TextSegment(left.join()));
+    } else {
+      final merged = autoMerge(localHunks, remoteHunks, start, end);
+      if (merged != null) {
+        segments.add(TextSegment(merged.join()));
+      } else {
+        segments.add(ConflictSegment(local: left.join(), remote: right.join()));
+      }
     }
+    cursor = end;
   }
-
-  for (var i = 0; i < b.length; i++) {
-    flushInsertions(i);
-
-    final lH = lCoverage[i];
-    final rH = rCoverage[i];
-    if (lH != null && rH != null) {
-      // Both sides cover this line ??a conflict, emitted once at the first
-      // overlapping line.
-      if (emittedL.contains(lH) && emittedR.contains(rH)) continue;
-      emitConflict(lH, rH);
-      continue;
-    }
-    if (lH != null) {
-      // Part of a conflict pair: wait for the overlap line instead of
-      // emitting local-only text that the conflict would supersede.
-      if (lConflictWith.containsKey(lH)) continue;
-      if (emittedL.contains(lH)) continue;
-      emitLocalOnly(lH);
-      continue;
-    }
-    if (rH != null) {
-      if (rConflictWith.containsKey(rH)) continue;
-      if (emittedR.contains(rH)) continue;
-      emitRemoteOnly(rH);
-      continue;
-    }
-
-    segments.add(TextSegment(lineText(b[i])));
-  }
-
-  flushInsertions(b.length);
+  segments.add(TextSegment(b.sublist(cursor).join()));
 
   return MergeResult(
     segments: segments,
     autoApplied: autoApplied,
-    remoteAddedLines: addedCount,
-    remoteRemovedLines: removedCount,
+    remoteAddedLines: rHunks.fold(
+      0,
+      (count, hunk) => count + hunk.lines.length,
+    ),
+    remoteRemovedLines: rHunks.fold(
+      0,
+      (count, hunk) => count + hunk.baseEnd - hunk.baseStart,
+    ),
   );
 }
 

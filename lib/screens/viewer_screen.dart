@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:async';
 
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/foundation.dart' show compute;
@@ -15,6 +16,7 @@ import 'package:html/dom.dart' as dom;
 import 'package:url_launcher/url_launcher.dart';
 
 import '../services/github_account.dart';
+import '../services/collab_session.dart';
 import '../services/github_api.dart';
 import '../services/github_link_rewriter.dart';
 import '../services/hackmd_account.dart';
@@ -67,6 +69,9 @@ class ViewerScreen extends StatefulWidget {
   final String? localPath;
   final String? localUri;
 
+  /// Owned by the Cloud route. Collaboration drafts never enter the paste/URL recents cache.
+  final CollabSession? collaboration;
+
   const ViewerScreen({
     super.key,
     required this.title,
@@ -76,18 +81,23 @@ class ViewerScreen extends StatefulWidget {
     this.githubLinkContext,
     this.localPath,
     this.localUri,
+    this.collaboration,
   });
 
   @override
   State<ViewerScreen> createState() => _ViewerScreenState();
 }
 
-class _ViewerScreenState extends State<ViewerScreen> {
+class _ViewerScreenState extends State<ViewerScreen>
+    with WidgetsBindingObserver {
   ReaderPrefs _prefs = const ReaderPrefs();
   // Parsing runs on a background isolate (see [convertMarkdownToHtml]) so
   // opening a large document doesn't freeze the navigation transition; null
   // just means "still converting", shown as a loading state below.
   String? _html;
+  int _renderVersion = 0;
+  bool _receivingCollaboration = false;
+  bool _leaving = false;
   late String _content = widget.content;
   late final _editController = TextEditingController(text: widget.content);
   final _editFocusNode = FocusNode();
@@ -146,6 +156,8 @@ class _ViewerScreenState extends State<ViewerScreen> {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
+    widget.collaboration?.addListener(_collaborationChanged);
     ReaderPrefs.load().then((loaded) {
       if (mounted) setState(() => _prefs = loaded);
     });
@@ -158,6 +170,75 @@ class _ViewerScreenState extends State<ViewerScreen> {
   void _onEditChanged() {
     final count = '\n'.allMatches(_editController.text).length + 1;
     if (count != _lineCount) setState(() => _lineCount = count);
+    if (!_receivingCollaboration && _editing) {
+      widget.collaboration?.edit(_editController.text);
+    }
+  }
+
+  void _collaborationChanged() {
+    if (!mounted) return;
+    final text = widget.collaboration!.draft.text;
+    if (_editController.text != text) {
+      _receivingCollaboration = true;
+      _editController.value = TextEditingValue(
+        text: text,
+        selection: TextSelection.collapsed(offset: text.length),
+      );
+      _receivingCollaboration = false;
+      _content = text;
+      if (!_editing) _render(text);
+    }
+    setState(() {});
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state != AppLifecycleState.resumed && widget.collaboration != null) {
+      unawaited(widget.collaboration!.flush());
+    }
+  }
+
+  Future<void> _leaveCollaboration() async {
+    if (_leaving) return;
+    final session = widget.collaboration!;
+    if (session.busy) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('同步進行中，請稍候；連線會在逾時後結束。')));
+      return;
+    }
+    setState(() => _leaving = true);
+    final saved = await session.flush();
+    if (!mounted) return;
+    setState(() => _leaving = false);
+    if (!saved) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('草稿尚未存妥，請重試或先另存新檔。')));
+      return;
+    }
+    // The draft is safely stored, but only pop if this screen is still on top:
+    // a route pushed while the save was pending must not be dismissed instead.
+    if (ModalRoute.of(context)?.isCurrent ?? false) {
+      Navigator.of(context).pop();
+    }
+  }
+
+  Future<void> _syncCollaboration() async {
+    await widget.collaboration!.synchronize((base, local, remote) async {
+      if (!mounted) return null;
+      final outcome = await Navigator.of(context).push<MergeOutcome>(
+        MaterialPageRoute(
+          builder: (_) => ConflictScreen(
+            base: base,
+            local: local,
+            remote: remote,
+            allowOverwrite: false,
+          ),
+        ),
+      );
+      return mounted ? outcome?.text : null;
+    });
   }
 
   /// 1-based line number of [offset] within [text].
@@ -183,6 +264,8 @@ class _ViewerScreenState extends State<ViewerScreen> {
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    widget.collaboration?.removeListener(_collaborationChanged);
     _editController.removeListener(_onEditChanged);
     _editController.dispose();
     _editFocusNode.dispose();
@@ -313,9 +396,10 @@ class _ViewerScreenState extends State<ViewerScreen> {
   }
 
   void _render(String markdown) {
+    final version = ++_renderVersion;
     _html = null;
     compute(convertMarkdownToHtml, markdown).then((html) {
-      if (!mounted) return;
+      if (!mounted || version != _renderVersion) return;
       final ctx = widget.githubLinkContext;
       final rendered = ctx == null
           ? html
@@ -348,6 +432,23 @@ class _ViewerScreenState extends State<ViewerScreen> {
   Future<void> _applyEdit() async {
     final edited = _editController.text;
     _scrollToLine = _lineOfOffset(edited, _editController.selection.baseOffset);
+    if (widget.collaboration != null) {
+      final session = widget.collaboration!;
+      session.edit(edited);
+      // Only leave edit mode once the draft is safely on disk; otherwise keep
+      // the editor open so the unsaved text is never lost.
+      if (!await session.flush()) {
+        if (mounted) setState(() {});
+        return;
+      }
+      if (!mounted) return;
+      setState(() {
+        _editing = false;
+        _content = edited;
+      });
+      _render(edited);
+      return;
+    }
     setState(() {
       _editing = false;
       _content = edited;
@@ -1032,6 +1133,18 @@ class _ViewerScreenState extends State<ViewerScreen> {
 
   @override
   Widget build(BuildContext context) {
+    return PopScope(
+      // Collaboration documents never pop straight away; every back gesture
+      // first flushes the local draft through _leaveCollaboration.
+      canPop: widget.collaboration == null,
+      onPopInvokedWithResult: (didPop, _) {
+        if (!didPop && widget.collaboration != null) _leaveCollaboration();
+      },
+      child: _buildViewer(context),
+    );
+  }
+
+  Widget _buildViewer(BuildContext context) {
     final html = _html;
     if (html == null) {
       return Scaffold(
@@ -1074,7 +1187,9 @@ class _ViewerScreenState extends State<ViewerScreen> {
           children: [
             Text(widget.title, maxLines: 1, overflow: TextOverflow.ellipsis),
             Text(
-              _isHackmdDoc
+              widget.collaboration != null
+                  ? '本機協作 · 手動快照同步'
+                  : _isHackmdDoc
                   ? 'HackMD 筆記'
                   : _isGithubDoc
                   ? 'GitHub 文件'
@@ -1158,6 +1273,9 @@ class _ViewerScreenState extends State<ViewerScreen> {
           ),
         ],
       ),
+      bottomNavigationBar: widget.collaboration == null
+          ? null
+          : _collaborationBar(),
       // The reader content and editor keep their own explicit font sizes —
       // the app-level UI text scale must not touch them.
       body: MediaQuery(
@@ -1506,6 +1624,58 @@ class _ViewerScreenState extends State<ViewerScreen> {
                   ),
                 ),
               ),
+      ),
+    );
+  }
+
+  Widget _collaborationBar() {
+    final session = widget.collaboration!;
+    return SafeArea(
+      top: false,
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              '${session.draft.endpoint.server} · ${session.draft.endpoint.room}',
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
+            Text(
+              '${session.localStatus} · ${session.dirty ? '有待同步編輯' : '快照模式'}',
+              style: TextStyle(
+                color: session.localError == null
+                    ? null
+                    : Theme.of(context).colorScheme.error,
+              ),
+            ),
+            Text(session.message, maxLines: 3, overflow: TextOverflow.ellipsis),
+            Row(
+              children: [
+                FilledButton.icon(
+                  onPressed: (session.busy || _leaving)
+                      ? null
+                      : _syncCollaboration,
+                  icon: session.busy
+                      ? const SizedBox(
+                          width: 16,
+                          height: 16,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      : const Icon(Icons.sync),
+                  label: const Text('同步 / 重試'),
+                ),
+                if (session.localError != null)
+                  TextButton(
+                    onPressed: () => session.flush(),
+                    child: const Text('重試本機儲存'),
+                  ),
+              ],
+            ),
+          ],
+        ),
       ),
     );
   }

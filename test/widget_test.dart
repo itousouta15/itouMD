@@ -35,7 +35,7 @@ void main() {
     expect(find.text('開始檢視'), findsOneWidget);
   });
 
-  testWidgets('Cloud navigation exposes both document sources', (
+  testWidgets('Cloud navigation exposes all document sources', (
     WidgetTester tester,
   ) async {
     SharedPreferences.setMockInitialValues({'itou_md_onboarding_done': true});
@@ -46,12 +46,17 @@ void main() {
     await tester.pump(const Duration(milliseconds: 350));
     expect(find.text('HackMD'), findsOneWidget);
     expect(find.text('GitHub'), findsOneWidget);
+    expect(find.text('本機協作'), findsOneWidget);
 
     await tester.tap(find.text('GitHub'));
     await tester.pump(const Duration(milliseconds: 350));
     await tester.pump(const Duration(milliseconds: 350));
     expect(find.text('開啟 GitHub 文件'), findsOneWidget);
     expect(find.text('我的 Repo'), findsOneWidget);
+    await tester.tap(find.text('本機協作'));
+    await tester.pumpAndSettle();
+    expect(find.text('本機協作文件'), findsOneWidget);
+    expect(find.text('開啟協作草稿'), findsOneWidget);
   });
 
   testWidgets('Settings is a tab and keeps theme customization available', (

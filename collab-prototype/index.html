@@ -1,0 +1,22 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="theme-color" content="#17253d">
+    <title>itouMD · Local collaboration lab</title>
+  </head>
+  <body>
+    <main>
+      <header><span class="eyebrow">itouMD / FIRST MILESTONE</span><h1>Local collaboration lab</h1><p>Your text lives on this device. Yjs merges edits when you reconnect.</p></header>
+      <form id="room-form"><label for="room">Document</label><input id="room" maxlength="64" pattern="[a-zA-Z0-9_-]+" required><button>Open document</button></form>
+      <section class="toolbar" aria-label="Connection and document actions"><span id="status" role="status">Loading local document…</span><button id="connection" disabled>Go offline</button><button id="snapshot" disabled>Save server version</button><button id="export" disabled>Download text</button></section>
+      <div id="editor" aria-label="Collaborative text editor"></div>
+      <footer><span id="local">Opening IndexedDB…</span><span id="count">0 characters</span></footer>
+      <p id="notice" role="status"></p>
+      <section><h2>Server versions</h2><button id="refresh">Refresh versions</button><ul id="versions"></ul></section>
+      <aside>Prototype: plain text / Markdown source, local-only collaboration server. No HackMD or GitHub connection. Open the same document in two browsers; disconnect both, edit, then reconnect.</aside>
+    </main>
+    <script type="module" src="/src/main.js"></script>
+  </body>
+</html>

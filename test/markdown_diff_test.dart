@@ -4,6 +4,85 @@ import 'package:itou_md/services/markdown_diff.dart';
 
 void main() {
   group('mergeLines', () {
+    test('an insertion after an earlier replacement is not dropped', () {
+      final result = mergeLines('a\nb\nc\n', 'A\nb\nc\nL\n', 'a\nB\nc\n');
+      expect(result.conflictCount, 0);
+      expect(result.resolve(useLocal: true), 'A\nB\nc\nL\n');
+    });
+
+    test(
+      'overlapping replacement choices retain the whole affected region',
+      () {
+        final result = mergeLines('a\nb\nc\nd\n', 'a\nX\nd\n', 'a\nb\nY\nd\n');
+        expect(result.resolve(useLocal: true), 'a\nX\nd\n');
+        expect(result.resolve(useLocal: false), 'a\nb\nY\nd\n');
+      },
+    );
+
+    test('empty text and missing final newline round-trip exactly', () {
+      expect(mergeLines('one', 'oneX', 'one').resolve(useLocal: true), 'oneX');
+      expect(mergeLines('', '', '').resolve(useLocal: true), '');
+      expect(mergeLines('', 'new', '').resolve(useLocal: true), 'new');
+    });
+
+    test('removing the final newline conflicts with an appended line', () {
+      for (final (base, local, remote) in [
+        ('a\n', 'a', 'a\nb\n'),
+        ('a\nb\n', 'a', 'a\nb\nc'),
+      ]) {
+        final result = mergeLines(base, local, remote);
+        expect(result.conflictCount, 1);
+        expect(result.resolve(useLocal: true), local);
+        expect(result.resolve(useLocal: false), remote);
+      }
+    });
+
+    test('connected overlaps preserve all edits and interior insertions', () {
+      const base = 'a\nb\nc\nd\ne\nf\n';
+      const local = 'a\nL1\nc\nL2\nf\n';
+      const remote = 'a\nb\nR\ne\nf\n';
+      final result = mergeLines(base, local, remote);
+      expect(result.conflictCount, 1);
+      expect(result.resolve(useLocal: true), local);
+      expect(result.resolve(useLocal: false), remote);
+
+      final insertion = mergeLines('a\nb\nc\n', 'a\nX\n', 'a\nb\nI\nc\n');
+      expect(insertion.conflictCount, 1);
+      expect(insertion.resolve(useLocal: true), 'a\nX\n');
+      expect(insertion.resolve(useLocal: false), 'a\nb\nI\nc\n');
+    });
+
+    test('small-document merges are symmetric and never concatenate lines', () {
+      const documents = [
+        '', '\n', 'a', 'a\n', 'b', 'b\n', '\n\n',
+        'a\na', 'a\nb', 'a\nb\n', 'b\na\n', 'a\n\n',
+      ];
+      for (final base in documents) {
+        for (final local in documents) {
+          final unchanged = mergeLines(base, local, base);
+          expect(unchanged.conflictCount, 0);
+          expect(unchanged.resolve(useLocal: false), local);
+          final identical = mergeLines(base, local, local);
+          expect(identical.conflictCount, 0);
+          expect(identical.resolve(useLocal: true), local);
+          for (final remote in documents) {
+            final result = mergeLines(base, local, remote);
+            final reversed = mergeLines(base, remote, local);
+            expect(result.conflictCount, reversed.conflictCount);
+            for (final useLocal in [true, false]) {
+              final text = result.resolve(useLocal: useLocal);
+              expect(text, reversed.resolve(useLocal: !useLocal));
+              expect(
+                text.split('\n').every((line) => ['', 'a', 'b'].contains(line)),
+                isTrue,
+                reason: 'base=$base local=$local remote=$remote result=$text',
+              );
+            }
+          }
+        }
+      }
+    });
+
     test('完全沒有變更', () {
       final result = mergeLines('A\nB\nC\n', 'A\nB\nC\n', 'A\nB\nC\n');
       expect(result.segments.whereType<ConflictSegment>(), isEmpty);
