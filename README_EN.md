@@ -28,6 +28,7 @@ The bottom navigation has three destinations: Home for new and recent documents,
 - **UI text scale**: Standard / Large / Extra-large; the reader content keeps its own independent size control.
 - **Theme system**: **follow the system** (or pick light / dark manually) with smooth animated transitions; **theme colors** can be customized per theme — accent (buttons, links) and background (an "auto" option derives a tinted background from the accent, or pick any color; panel tones are derived automatically and text contrast adapts to the background brightness).
 - **Save as**: export edited content as a `.md` file anywhere on the device.
+- **Export PDF**: More actions → **匯出 PDF** saves the current document, including unsaved edits, as a paginated A4 PDF with selectable text and bundled Chinese font support.
 
 ### HackMD Cloud
 
@@ -228,6 +229,7 @@ Without the secrets, CI falls back to debug signing and still builds fine.
 | `html` | HTML DOM parsing (custom widget builders) |
 | `http` | Network requests (URL fetch, HackMD API, update check, LLM) |
 | `file_picker` | Pick local files, save as |
+| `pdf` | Generate paginated Markdown PDFs |
 | `flutter_secure_storage` | HackMD / GitHub token storage (Android Keystore / iOS Keychain) |
 | `shared_preferences` | Preferences, recents, offline cache, sync history |
 | `google_fonts` | Reading fonts |
@@ -248,6 +250,16 @@ Without the secrets, CI falls back to debug signing and still builds fine.
 2. On Home, tap "New document" and enter a title; use "Open document" to paste text, pick a local file, or fetch from a GitHub / Gist / HackMD URL. Under Cloud → GitHub, enter `owner/repo` (or paste its URL) to open a README directly.
 3. In the viewer, tap the edit icon to switch to edit mode — a line-number gutter appears on the left and the formatting toolbar docks above the keyboard.
 4. Tap "Done" to apply and re-render; the preview scrolls back to the line you were editing. More actions → "Save as" exports a `.md` file.
+
+### Export a Markdown document as PDF
+
+Open a document from any source, then choose **More actions → 匯出 PDF** and select a save location. You can export directly while editing; the PDF uses the text at the moment you select export, without saving or syncing your Markdown source. Cancelling the save dialog leaves the document unchanged.
+
+PDFs use a fixed light A4 layout with page numbers, independent of the reader theme. Headings, emphasis, links, lists, task lists, quotes, tables, code, and expanded HackMD containers are supported. Chinese text uses the bundled font, so no font download is required. Supported remote images are fetched without account credentials; unavailable or unsupported images fall back to their alternative text and source link. LaTeX expressions are retained as readable TeX, rather than typeset equations. Reader-specific fonts, syntax highlighting, arbitrary HTML/CSS, and interactive embeds are not reproduced.
+
+Images support PNG/JPEG, including base64 data URLs, with limits of 20 unique images, 5 MB per image, 20 MB total downloads, and 12 million decoded pixels total. Downloads have a 15-second overall budget. Large images are scaled down; small images keep their natural size. Table cells use plain text; long cells continue in additional rows and tables wider than six columns are stacked for readability.
+
+The PDF font is [Noto Sans TC Regular](https://fonts.gstatic.com/s/a/17d9b1bfc0eb614c5947422e575e4bf664afc809def6cdcd7760d76c71928e50.ttf), bundled under the [SIL Open Font License](assets/fonts/LICENSE-NotoSansTC.txt). It adds approximately 7 MB to the source assets and is subset when embedded in each PDF.
 5. Tap the copy icon on a code block to copy the whole block; tap any image for a fullscreen view.
 
 ### HackMD sync & conflict merge

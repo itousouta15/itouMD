@@ -23,6 +23,7 @@ import '../services/hackmd_account.dart';
 import '../services/hackmd_api.dart';
 import '../services/local_file_saver.dart';
 import '../services/markdown_editor_actions.dart';
+import '../services/markdown_pdf.dart';
 import '../services/markdown_renderer.dart';
 import '../services/note_cache.dart';
 import '../services/reader_prefs.dart';
@@ -110,6 +111,7 @@ class _ViewerScreenState extends State<ViewerScreen>
   // The markdown line to land on when the reader re-renders after editing.
   int? _scrollToLine;
   bool _editing = false;
+  bool _exportingPdf = false;
   bool _syncingToHackmd = false;
   bool _syncingToGithub = false;
   // Resolved lazily on first sync/open-refresh (custom-aliased HackMD URLs
@@ -508,6 +510,38 @@ class _ViewerScreenState extends State<ViewerScreen>
       );
     }
     setState(() => _editing = true);
+  }
+
+  Future<void> _exportPdf() async {
+    if (_exportingPdf) return;
+    final text = _editing ? _editController.text : _content;
+    setState(() => _exportingPdf = true);
+    try {
+      final bytes = await generateMarkdownPdf(
+        markdown: text,
+        title: widget.title,
+        githubLinkContext: widget.githubLinkContext,
+      );
+      if (!mounted) return;
+      final path = await FilePicker.saveFile(
+        dialogTitle: '匯出 PDF',
+        fileName: markdownPdfFileName(widget.title),
+        type: FileType.custom,
+        allowedExtensions: ['pdf'],
+        bytes: bytes,
+      );
+      if (!mounted || path == null) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('已匯出 PDF (｡•ᴗ•｡)')));
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('PDF 匯出失敗，再試一次看看 (´;ω;`)')));
+    } finally {
+      if (mounted) setState(() => _exportingPdf = false);
+    }
   }
 
   Future<void> _saveAs(BuildContext context) async {
@@ -1247,6 +1281,8 @@ class _ViewerScreenState extends State<ViewerScreen>
               switch (value) {
                 case 'saveAs':
                   _saveAs(context);
+                case 'exportPdf':
+                  _exportPdf();
                 case 'settings':
                   _openReaderSettings(context);
                 case 'copy':
@@ -1259,6 +1295,11 @@ class _ViewerScreenState extends State<ViewerScreen>
             },
             itemBuilder: (_) => [
               const PopupMenuItem(value: 'saveAs', child: Text('另存新檔')),
+              PopupMenuItem(
+                value: 'exportPdf',
+                enabled: !_exportingPdf,
+                child: Text(_exportingPdf ? '正在匯出 PDF…' : '匯出 PDF'),
+              ),
               if (_editing)
                 const PopupMenuItem(value: 'ai', child: Text('AI 助理')),
               if (!_editing)

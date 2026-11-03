@@ -1,4 +1,4 @@
-﻿name: itou_md
+name: itou_md
 description: "A new Flutter project."
 # The following line prevents the package from being accidentally published to
 # pub.dev using `flutter pub publish`. This is preferred for private packages.
@@ -49,6 +49,7 @@ dependencies:
   package_info_plus: ^9.0.1
   path_provider: ^2.1.6
   open_filex: ^4.7.0
+  pdf: ^3.13.1
 
 dev_dependencies:
   flutter_test:
@@ -82,6 +83,7 @@ flutter:
   uses-material-design: true
 
   assets:
+    - assets/fonts/NotoSansTC-Regular.ttf
     - assets/logo/logo_nbg.webp
     - assets/logo/logo_wtnbg.webp
     - assets/logo/hackmd_logo.png
