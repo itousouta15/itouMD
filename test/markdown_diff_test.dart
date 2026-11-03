@@ -54,8 +54,18 @@ void main() {
 
     test('small-document merges are symmetric and never concatenate lines', () {
       const documents = [
-        '', '\n', 'a', 'a\n', 'b', 'b\n', '\n\n',
-        'a\na', 'a\nb', 'a\nb\n', 'b\na\n', 'a\n\n',
+        '',
+        '\n',
+        'a',
+        'a\n',
+        'b',
+        'b\n',
+        '\n\n',
+        'a\na',
+        'a\nb',
+        'a\nb\n',
+        'b\na\n',
+        'a\n\n',
       ];
       for (final base in documents) {
         for (final local in documents) {

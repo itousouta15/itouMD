@@ -154,7 +154,9 @@ void main() {
     },
   );
 
-  testWidgets('done editing retains the field when its local save fails', (tester) async {
+  testWidgets('done editing retains the field when its local save fails', (
+    tester,
+  ) async {
     final server = MemoryServer()..offline = true;
     final store = FailableStore();
     await launch(tester, server, store: store);
@@ -165,8 +167,10 @@ void main() {
     await tester.tap(find.byTooltip('完成編輯'));
     await tester.pumpAndSettle();
     expect(find.byTooltip('完成編輯'), findsOneWidget);
-    expect(tester.widget<TextField>(find.byType(TextField)).controller!.text,
-        'unsaved editor text');
+    expect(
+      tester.widget<TextField>(find.byType(TextField)).controller!.text,
+      'unsaved editor text',
+    );
     store.fail = false;
     await tester.tap(find.byTooltip('完成編輯'));
     await pumpUntil(tester, find.byTooltip('編輯'));
@@ -174,34 +178,47 @@ void main() {
     await pumpUntil(tester, find.text('開啟協作草稿'));
   });
 
-  testWidgets('back waits for later edits and prevents a sync during its save', (tester) async {
-    final server = MemoryServer();
-    final store = FailableStore();
-    await launch(tester, server, store: store);
-    await tester.tap(find.byTooltip('編輯'));
-    await tester.pumpAndSettle();
-    store.hold = Completer();
-    await tester.enterText(find.byType(TextField), 'first');
-    await tester.pageBack();
-    await tester.pump();
-    expect(find.byType(ViewerScreen), findsOneWidget);
-    expect(tester.widget<FilledButton>(find.widgetWithText(FilledButton, '同步 / 重試')).onPressed,
-        isNull);
-    await tester.enterText(find.byType(TextField), 'typed while leaving');
-    store.fail = true;
-    store.hold!.complete();
-    await tester.pumpAndSettle();
-    expect(find.byType(ViewerScreen), findsOneWidget);
-    expect(tester.widget<TextField>(find.byType(TextField)).controller!.text,
-        'typed while leaving');
-    store.fail = false;
-    await tester.pageBack();
-    await pumpUntil(tester, find.text('開啟協作草稿'));
-    final saved = await store.load(CollabEndpoint.parse('http://127.0.0.1:8787', 'demo'));
-    expect(saved!.text, 'typed while leaving');
-  });
+  testWidgets(
+    'back waits for later edits and prevents a sync during its save',
+    (tester) async {
+      final server = MemoryServer();
+      final store = FailableStore();
+      await launch(tester, server, store: store);
+      await tester.tap(find.byTooltip('編輯'));
+      await tester.pumpAndSettle();
+      store.hold = Completer();
+      await tester.enterText(find.byType(TextField), 'first');
+      await tester.pageBack();
+      await tester.pump();
+      expect(find.byType(ViewerScreen), findsOneWidget);
+      expect(
+        tester
+            .widget<FilledButton>(find.widgetWithText(FilledButton, '同步 / 重試'))
+            .onPressed,
+        isNull,
+      );
+      await tester.enterText(find.byType(TextField), 'typed while leaving');
+      store.fail = true;
+      store.hold!.complete();
+      await tester.pumpAndSettle();
+      expect(find.byType(ViewerScreen), findsOneWidget);
+      expect(
+        tester.widget<TextField>(find.byType(TextField)).controller!.text,
+        'typed while leaving',
+      );
+      store.fail = false;
+      await tester.pageBack();
+      await pumpUntil(tester, find.text('開啟協作草稿'));
+      final saved = await store.load(
+        CollabEndpoint.parse('http://127.0.0.1:8787', 'demo'),
+      );
+      expect(saved!.text, 'typed while leaving');
+    },
+  );
 
-  testWidgets('a pending back save does not pop a subsequently opened route', (tester) async {
+  testWidgets('a pending back save does not pop a subsequently opened route', (
+    tester,
+  ) async {
     final store = FailableStore();
     await launch(tester, MemoryServer(), store: store);
     await tester.tap(find.byTooltip('編輯'));
@@ -211,9 +228,13 @@ void main() {
     await tester.pageBack();
     await tester.pump();
     final navigator = Navigator.of(tester.element(find.byType(ViewerScreen)));
-    unawaited(navigator.push(MaterialPageRoute<void>(
-      builder: (_) => const Scaffold(body: Text('another route')),
-    )));
+    unawaited(
+      navigator.push(
+        MaterialPageRoute<void>(
+          builder: (_) => const Scaffold(body: Text('another route')),
+        ),
+      ),
+    );
     await tester.pumpAndSettle();
     store.hold!.complete();
     await tester.pumpAndSettle();
